@@ -1,7 +1,8 @@
 <!-- Keep a Changelog guide -> https://keepachangelog.com -->
 
-# ODB_IntelliJ Changelog
+# Lewis ODB changelog
 
 ## [Unreleased]
 ### Added
-- Initial scaffold created from [IntelliJ Platform Plugin Template](https://github.com/JetBrains/intellij-platform-plugin-template)
+- Permanent plugin identity and build baseline.
+- Planned `Run with ODB` support for local Java Application configurations on target JDK 8.
