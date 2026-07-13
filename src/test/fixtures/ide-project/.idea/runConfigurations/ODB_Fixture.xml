@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="ODB Fixture" type="Application" factoryName="Application">
+    <envs>
+      <env name="FIXTURE_ENV" value="kept" />
+    </envs>
+    <option name="MAIN_CLASS_NAME" value="org.lewisodb.fixture.FixtureMain" />
+    <module name="odb-fixture" />
+    <option name="PROGRAM_PARAMETERS" value="one &quot;two words&quot; السلام --read-stdin" />
+    <option name="REDIRECT_INPUT" value="true" />
+    <option name="INPUT_FILE" value="$PROJECT_DIR$/input.txt" />
+    <option name="VM_PARAMETERS" value="-Dfixture.property=kept" />
+    <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/work dir" />
+    <method v="2">
+      <option name="Make" enabled="true" />
+    </method>
+  </configuration>
+</component>

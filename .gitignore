@@ -1,6 +1,8 @@
 .DS_Store
 .gradle
 .idea
+!src/test/fixtures/ide-project/.idea/
+!src/test/fixtures/ide-project/.idea/**
 .intellijPlatform
 .kotlin
 build
