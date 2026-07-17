@@ -27,6 +27,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.lewisodb.intellij.launch.OdbLaunchPlan
+import org.lewisodb.intellij.launch.OdbPreflight
 import java.nio.file.Path
 import java.nio.file.Files
 
@@ -203,7 +204,9 @@ class OdbExecutionTest : BasePlatformTestCase() {
         )
     }
 
-    private class TestableOdbProgramRunner : OdbProgramRunner() {
+    private class TestableOdbProgramRunner : OdbProgramRunner(
+        OdbPreflight(isIntelliJ = true, productName = "IntelliJ IDEA", desktopAvailable = { true }),
+    ) {
         fun executeState(state: RunProfileState, environment: ExecutionEnvironment): RunContentDescriptor =
             requireNotNull(doExecute(state, environment))
     }

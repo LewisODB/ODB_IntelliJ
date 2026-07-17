@@ -11,10 +11,13 @@ import com.intellij.execution.ui.RunContentDescriptor
 import com.intellij.execution.runners.RunContentBuilder
 import com.intellij.openapi.project.Project
 import org.lewisodb.intellij.launch.OdbLaunchPlan
+import org.lewisodb.intellij.launch.OdbPreflight
 import java.nio.file.Files
 import java.nio.file.Path
 
-open class OdbProgramRunner : GenericProgramRunner<RunnerSettings>() {
+open class OdbProgramRunner internal constructor(
+    private val preflight: OdbPreflight = OdbPreflight(),
+) : GenericProgramRunner<RunnerSettings>() {
     override fun getRunnerId(): String = RUNNER_ID
 
     override fun canRun(executorId: String, profile: RunProfile): Boolean =
@@ -24,10 +27,10 @@ open class OdbProgramRunner : GenericProgramRunner<RunnerSettings>() {
         state: com.intellij.execution.configurations.RunProfileState,
         environment: ExecutionEnvironment,
     ): RunContentDescriptor? {
-        val javaState = state as? JavaCommandLineState
-            ?: throw ExecutionException("Run with ODB supports Java Application command lines only.")
+        val parameters = preflight.resolve(environment.runProfile, state, environment.targetEnvironmentRequest)
+        val javaState = state as JavaCommandLineState
         val probe = probePath()
-        OdbLaunchPlan(probe).applyTo(javaState.javaParameters)
+        OdbLaunchPlan(probe).applyTo(parameters)
         return super.doExecute(javaState, environment)
     }
 
@@ -45,10 +48,14 @@ open class OdbProgramRunner : GenericProgramRunner<RunnerSettings>() {
 
     private fun probePath(): Path {
         val configured = System.getProperty(PROBE_PATH_PROPERTY)
-            ?: throw ExecutionException("The Lewis ODB test probe is unavailable.")
-        val path = Path.of(configured).toAbsolutePath().normalize()
-        if (!Files.isRegularFile(path)) {
-            throw ExecutionException("The Lewis ODB test probe is unavailable: $path")
+            ?: throw ExecutionException(RUNTIME_MISSING_MESSAGE)
+        val path = try {
+            Path.of(configured).toAbsolutePath().normalize()
+        } catch (_: RuntimeException) {
+            throw ExecutionException(RUNTIME_MISSING_MESSAGE)
+        }
+        if (!Files.isRegularFile(path) || !Files.isReadable(path)) {
+            throw ExecutionException(RUNTIME_MISSING_MESSAGE)
         }
         return path
     }
@@ -56,5 +63,7 @@ open class OdbProgramRunner : GenericProgramRunner<RunnerSettings>() {
     companion object {
         const val RUNNER_ID = "LewisOdbProgramRunner"
         const val PROBE_PATH_PROPERTY = "org.lewisodb.intellij.testProbe"
+        const val RUNTIME_MISSING_MESSAGE =
+            "Run with ODB is incomplete: the bundled ODB runtime is missing or unreadable. Reinstall the plugin."
     }
 }
