@@ -10,16 +10,15 @@ import com.intellij.execution.runners.ExecutionEnvironment
 import com.intellij.execution.runners.GenericProgramRunner
 import com.intellij.execution.ui.RunContentDescriptor
 import com.intellij.execution.runners.RunContentBuilder
-import com.intellij.execution.process.ProcessEvent
-import com.intellij.execution.process.ProcessListener
-import com.intellij.execution.process.ProcessOutputTypes
 import com.intellij.execution.ui.ConsoleView
 import com.intellij.execution.ui.ConsoleViewContentType
 import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
 import com.intellij.openapi.application.PathManager
+import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Key
+import org.lewisodb.intellij.lifecycle.OdbSessionOwner
 import org.lewisodb.intellij.launch.OdbLaunchPlan
 import org.lewisodb.intellij.launch.OdbPreflight
 import org.lewisodb.intellij.protocol.OdbSessionReporter
@@ -34,6 +33,7 @@ import java.nio.file.Path
 open class OdbProgramRunner internal constructor(
     private val preflight: OdbPreflight = OdbPreflight(),
     private val prepareRuntime: () -> OdbPreparedRuntime = ::prepareDefaultRuntime,
+    private val sessionOwner: (Project) -> OdbSessionOwner = { it.service() },
 ) : GenericProgramRunner<RunnerSettings>() {
     override fun getRunnerId(): String = RUNNER_ID
 
@@ -52,8 +52,16 @@ open class OdbProgramRunner internal constructor(
             throw ExecutionException(RUNTIME_MISSING_MESSAGE, error)
         }
         environment.putUserData(PREPARED_RUNTIME_KEY, runtime)
-        OdbLaunchPlan(runtime.runtimeJar, runtime.sessionDirectory, runtime.token).applyTo(parameters)
-        return super.doExecute(javaState, environment)
+        return try {
+            OdbLaunchPlan(runtime.runtimeJar, runtime.sessionDirectory, runtime.token).applyTo(parameters)
+            super.doExecute(javaState, environment)
+        } catch (error: Throwable) {
+            environment.getUserData(PREPARED_RUNTIME_KEY)?.let { prepared ->
+                sessionOwner(environment.project).cleanupBeforeStart(prepared.session)
+                environment.putUserData(PREPARED_RUNTIME_KEY, null)
+            }
+            throw error
+        }
     }
 
     override fun doExecute(
@@ -64,16 +72,24 @@ open class OdbProgramRunner internal constructor(
     ): RunContentDescriptor {
         val result = state.execute(environment.executor, this)
             ?: throw ExecutionException("Run with ODB did not start a process.")
-        observeSession(project, environment, result)
-        onProcessStarted(environment.runnerSettings, result)
-        return RunContentBuilder(result, environment).showRunContent(contentToReuse)
+        val owner = observeSession(project, environment, result)
+        return try {
+            onProcessStarted(environment.runnerSettings, result)
+            RunContentBuilder(result, environment).showRunContent(contentToReuse)
+        } catch (error: Throwable) {
+            owner.requestStop(result.processHandler)
+            throw error
+        }
     }
 
-    private fun observeSession(project: Project, environment: ExecutionEnvironment, result: ExecutionResult) {
+    private fun observeSession(
+        project: Project,
+        environment: ExecutionEnvironment,
+        result: ExecutionResult,
+    ): OdbSessionOwner {
         val prepared = environment.getUserData(PREPARED_RUNTIME_KEY)
             ?: throw ExecutionException("Run with ODB lost its prepared runtime state.")
         val console = result.executionConsole as? ConsoleView
-        console?.print("Bundled ODB runtime prepared.\n", ConsoleViewContentType.SYSTEM_OUTPUT)
         val reporter = OdbSessionReporter(
             prepared.token,
             printStatus = { console?.print(it, ConsoleViewContentType.SYSTEM_OUTPUT) },
@@ -84,15 +100,11 @@ open class OdbProgramRunner internal constructor(
                     .notify(project)
             },
         )
-        result.processHandler.addProcessListener(object : ProcessListener {
-            override fun onTextAvailable(event: ProcessEvent, outputType: Key<*>) {
-                if (outputType == ProcessOutputTypes.STDERR) reporter.onStderr(event.text)
-            }
-
-            override fun processTerminated(event: ProcessEvent) {
-                reporter.onTerminated(event.exitCode)
-            }
-        })
+        val owner = sessionOwner(project)
+        owner.supervise(result.processHandler, prepared.session, reporter)
+        environment.putUserData(PREPARED_RUNTIME_KEY, null)
+        console?.print("Bundled ODB runtime prepared.\n", ConsoleViewContentType.SYSTEM_OUTPUT)
+        return owner
     }
 
     companion object {

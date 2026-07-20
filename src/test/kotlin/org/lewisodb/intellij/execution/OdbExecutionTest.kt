@@ -1,6 +1,7 @@
 package org.lewisodb.intellij.execution
 
 import com.intellij.execution.application.ApplicationConfiguration
+import com.intellij.execution.ExecutionResult
 import com.intellij.execution.configurations.JavaParameters
 import com.intellij.execution.configurations.RunProfile
 import com.intellij.execution.ExecutorRegistry
@@ -9,6 +10,8 @@ import com.intellij.execution.configurations.RunProfileState
 import com.intellij.execution.configurations.JavaCommandLineState
 import com.intellij.execution.impl.ConsoleViewImpl
 import com.intellij.execution.process.CapturingProcessHandler
+import com.intellij.execution.process.ProcessHandler
+import com.intellij.execution.configurations.RunnerSettings
 import com.intellij.execution.runners.ProgramRunner
 import com.intellij.execution.runners.ExecutionEnvironment
 import com.intellij.execution.runners.ExecutionEnvironmentBuilder
@@ -25,9 +28,14 @@ import org.jdom.Element
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.lewisodb.intellij.launch.OdbLaunchPlan
 import org.lewisodb.intellij.launch.OdbPreflight
+import org.lewisodb.intellij.lifecycle.OdbSessionOwner
+import org.lewisodb.intellij.runtime.FileOdbRuntimeBundle
+import org.lewisodb.intellij.runtime.OdbPreparedRuntime
+import org.lewisodb.intellij.runtime.OdbRuntimeExtractor
 import java.nio.file.Path
 import java.nio.file.Files
 
@@ -191,7 +199,11 @@ class OdbExecutionTest : BasePlatformTestCase() {
         }
         val before = serialize(configuration)
         val executor = OdbExecutor()
-        val runner = TestableOdbProgramRunner()
+        val root = Files.createTempDirectory("odb-success-root").toRealPath()
+        lateinit var prepared: OdbPreparedRuntime
+        val runner = TestableOdbProgramRunner(
+            prepareRuntime = { preparedRuntime(root).also { prepared = it } },
+        )
         val environment = ExecutionEnvironmentBuilder(project, executor)
             .runProfile(configuration)
             .runner(runner)
@@ -218,6 +230,7 @@ class OdbExecutionTest : BasePlatformTestCase() {
         assertTrue(console.text, console.text.contains("Loading org.lewisodb.fixture.FixtureMain with ODB..."))
         assertTrue(console.text, console.text.contains("ODB recording started."))
         assertTrue(console.text, console.text.contains("ODB debugger ready."))
+        assertFalse(Files.exists(prepared.sessionDirectory))
         assertEquals(before, serialize(configuration))
 
         val normalExecutor = DefaultRunExecutor.getRunExecutorInstance()
@@ -236,11 +249,171 @@ class OdbExecutionTest : BasePlatformTestCase() {
         )
     }
 
-    private class TestableOdbProgramRunner : OdbProgramRunner(
+    fun testStandardStopKeepsDelegatedProcessAndCleansStateAfterTermination() {
+        configureLifecycleFixture("odb-stop-jdk8", "odb-stop-fixture")
+        val root = Files.createTempDirectory("odb-stop-root").toRealPath()
+        lateinit var prepared: OdbPreparedRuntime
+        val runner = TestableOdbProgramRunner(
+            prepareRuntime = { preparedRuntime(root).also { prepared = it } },
+        )
+        val running = startLifecycleProbe("wait-for-stop", runner)
+        waitUntil(10_000) {
+            running.console.waitAllRequests()
+            running.console.text.contains("ODB debugger ready.")
+        }
+
+        assertSame(runner.delegatedHandler, running.handler)
+        assertFalse(running.handler.isProcessTerminated)
+        assertTrue(Files.exists(prepared.sessionDirectory))
+
+        running.handler.destroyProcess()
+
+        assertTrue("Stop timed out\n${running.console.text}", running.handler.waitFor(10_000))
+        assertFalse(Files.exists(prepared.sessionDirectory))
+    }
+
+    fun testCrashAndFatalExitCleanStateAfterTermination() {
+        configureLifecycleFixture("odb-exit-jdk8", "odb-exit-fixture")
+
+        listOf("crash" to 7, "fatal" to 1).forEach { (mode, expectedExit) ->
+            val root = Files.createTempDirectory("odb-$mode-root").toRealPath()
+            lateinit var prepared: OdbPreparedRuntime
+            val runner = TestableOdbProgramRunner(
+                prepareRuntime = { preparedRuntime(root).also { prepared = it } },
+            )
+            val running = startLifecycleProbe(mode, runner)
+
+            assertTrue("$mode timed out\n${running.console.text}", running.handler.waitFor(10_000))
+            running.console.waitAllRequests()
+
+            assertEquals(expectedExit, running.handler.exitCode)
+            assertFalse(Files.exists(prepared.sessionDirectory))
+        }
+    }
+
+    fun testDisposalRequestsStopWithoutWaitingAndCleansAfterTermination() {
+        configureLifecycleFixture("odb-disposal-jdk8", "odb-disposal-fixture")
+        val root = Files.createTempDirectory("odb-disposal-root").toRealPath()
+        lateinit var prepared: OdbPreparedRuntime
+        val owner = OdbSessionOwner()
+        val runner = TestableOdbProgramRunner(
+            prepareRuntime = { preparedRuntime(root).also { prepared = it } },
+            owner = owner,
+        )
+        val running = startLifecycleProbe("wait-for-stop", runner)
+        waitUntil(10_000) {
+            running.console.waitAllRequests()
+            running.console.text.contains("ODB debugger ready.")
+        }
+
+        owner.dispose()
+        owner.dispose()
+
+        assertTrue("disposal timed out\n${running.console.text}", running.handler.waitFor(10_000))
+        assertFalse(Files.exists(prepared.sessionDirectory))
+    }
+
+    fun testProcessStartFailureRequestsStopAndCleansAfterTermination() {
+        configureLifecycleFixture("odb-start-failure-jdk8", "odb-start-failure-fixture")
+        val root = Files.createTempDirectory("odb-start-failure-root").toRealPath()
+        lateinit var prepared: OdbPreparedRuntime
+        val runner = TestableOdbProgramRunner(
+            prepareRuntime = { preparedRuntime(root).also { prepared = it } },
+            failOnProcessStarted = true,
+        )
+
+        val error = runCatching { startLifecycleProbe("wait-for-stop", runner) }.exceptionOrNull()
+        val handler = requireNotNull(runner.delegatedHandler)
+
+        assertTrue(error is AssertionError)
+        assertEquals("simulated process-start failure", error?.message)
+        assertTrue("failed start did not stop", handler.waitFor(10_000))
+        assertFalse(Files.exists(prepared.sessionDirectory))
+    }
+
+    private data class RunningProbe(
+        val handler: ProcessHandler,
+        val console: ConsoleViewImpl,
+    )
+
+    private fun configureLifecycleFixture(sdkName: String, libraryName: String) {
+        val applicationJar = Path.of(System.getProperty("org.lewisodb.intellij.testApplication"))
+        val sdk = JavaSdk.getInstance().createJdk(
+            sdkName,
+            System.getProperty("org.lewisodb.intellij.testJdk8"),
+            false,
+        )
+        WriteAction.run<RuntimeException> {
+            ProjectJdkTable.getInstance().addJdk(sdk, testRootDisposable)
+        }
+        ModuleRootModificationUtil.setModuleSdk(module, sdk)
+        PsiTestUtil.addLibrary(module, libraryName, applicationJar.parent.toString(), applicationJar.fileName.toString())
+    }
+
+    private fun startLifecycleProbe(mode: String, runner: TestableOdbProgramRunner): RunningProbe {
+        val configuration = ApplicationConfiguration("ODB $mode", project).apply {
+            setModule(module)
+            mainClassName = "org.lewisodb.fixture.FixtureMain"
+            programParameters = "--odb-probe-mode=$mode"
+            workingDirectory = Files.createTempDirectory("odb-$mode-work").toString()
+        }
+        val executor = OdbExecutor()
+        val environment = ExecutionEnvironmentBuilder(project, executor)
+            .runProfile(configuration)
+            .runner(runner)
+            .build()
+        val state = requireNotNull(configuration.getState(executor, environment))
+        val descriptor = runner.executeState(state, environment)
+        Disposer.register(testRootDisposable, descriptor)
+        val handler = requireNotNull(descriptor.processHandler)
+        val console = descriptor.executionConsole as ConsoleViewImpl
+        console.component
+        handler.startNotify()
+        return RunningProbe(handler, console)
+    }
+
+    private fun preparedRuntime(root: Path): OdbPreparedRuntime {
+        val runtime = Path.of(System.getProperty(OdbProgramRunner.PROBE_PATH_PROPERTY))
+        val manifest = Path.of(System.getProperty(OdbProgramRunner.PROBE_MANIFEST_PATH_PROPERTY))
+        return OdbRuntimeExtractor(root, FileOdbRuntimeBundle(manifest, runtime)).prepare()
+    }
+
+    private class TestableOdbProgramRunner(
+        prepareRuntime: (() -> OdbPreparedRuntime)? = null,
+        owner: OdbSessionOwner? = null,
+        private val failOnProcessStarted: Boolean = false,
+    ) : OdbProgramRunner(
         OdbPreflight(isIntelliJ = true, productName = "IntelliJ IDEA", desktopAvailable = { true }),
+        prepareRuntime ?: { defaultPreparedRuntime() },
+        { project -> owner ?: project.getService(OdbSessionOwner::class.java) },
     ) {
+        var delegatedHandler: ProcessHandler? = null
+
+        override fun onProcessStarted(settings: RunnerSettings?, result: ExecutionResult) {
+            delegatedHandler = result.processHandler
+            if (failOnProcessStarted) throw AssertionError("simulated process-start failure")
+            super.onProcessStarted(settings, result)
+        }
+
         fun executeState(state: RunProfileState, environment: ExecutionEnvironment): RunContentDescriptor =
             requireNotNull(doExecute(state, environment))
+
+        companion object {
+            private fun defaultPreparedRuntime(): OdbPreparedRuntime {
+                val runtime = Path.of(System.getProperty(OdbProgramRunner.PROBE_PATH_PROPERTY))
+                val manifest = Path.of(System.getProperty(OdbProgramRunner.PROBE_MANIFEST_PATH_PROPERTY))
+                val root = Files.createTempDirectory("odb-test-runner-root").toRealPath()
+                return OdbRuntimeExtractor(root, FileOdbRuntimeBundle(manifest, runtime)).prepare()
+            }
+        }
+    }
+
+    private fun waitUntil(timeoutMillis: Long, condition: () -> Boolean) {
+        val deadline = System.nanoTime() + timeoutMillis * 1_000_000
+        while (!condition()) {
+            if (System.nanoTime() >= deadline) throw AssertionError("Timed out waiting for process output")
+            Thread.sleep(25)
+        }
     }
 
     private fun serialize(configuration: ApplicationConfiguration): String =

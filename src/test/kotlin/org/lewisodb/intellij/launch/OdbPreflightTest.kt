@@ -22,9 +22,13 @@ import com.intellij.openapi.roots.ModuleRootModificationUtil
 import com.intellij.testFramework.LightVirtualFile
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame
+import org.junit.Assert.assertThrows
 import org.lewisodb.intellij.execution.OdbExecutor
 import org.lewisodb.intellij.execution.OdbProgramRunner
+import org.lewisodb.intellij.lifecycle.OdbSessionState
+import org.lewisodb.intellij.runtime.OdbPreparedRuntime
 import java.nio.file.Files
 import java.nio.file.Path
 import java.lang.reflect.Proxy
@@ -295,6 +299,25 @@ class OdbPreflightTest : BasePlatformTestCase() {
         }
     }
 
+    fun testRunnerCleansPreparedStateWhenProcessCreationFails() {
+        val launch = launch()
+        val root = Files.createTempDirectory("odb-start-failure-root").toRealPath()
+        val directory = Files.createTempDirectory(root, "session-").toRealPath()
+        val prepared = OdbPreparedRuntime(
+            OdbSessionState.create(root, directory),
+            directory.resolve("odb-runtime.jar"),
+            "0123456789abcdef0123456789abcdef",
+        )
+        val runner = PreparedTestableRunner(supportedPreflight()) { prepared }
+
+        assertThrows(AssertionError::class.java) {
+            runner.executeState(launch.state, launch.environment)
+        }
+
+        assertEquals(1, launch.state.executionCount)
+        assertFalse(Files.exists(directory))
+    }
+
     private fun rejection(launch: Launch, desktopAvailable: Boolean = true): String =
         rejection(launch.profile, launch.state, desktopAvailable)
 
@@ -405,6 +428,14 @@ class OdbPreflightTest : BasePlatformTestCase() {
     }
 
     private class TestableRunner(preflight: OdbPreflight) : OdbProgramRunner(preflight) {
+        fun executeState(state: RunProfileState, environment: ExecutionEnvironment): RunContentDescriptor? =
+            doExecute(state, environment)
+    }
+
+    private class PreparedTestableRunner(
+        preflight: OdbPreflight,
+        prepareRuntime: () -> OdbPreparedRuntime,
+    ) : OdbProgramRunner(preflight, prepareRuntime) {
         fun executeState(state: RunProfileState, environment: ExecutionEnvironment): RunContentDescriptor? =
             doExecute(state, environment)
     }

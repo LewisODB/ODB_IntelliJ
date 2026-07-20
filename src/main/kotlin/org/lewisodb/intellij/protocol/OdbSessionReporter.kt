@@ -8,18 +8,24 @@ class OdbSessionReporter(
     private val decoder = OdbEventDecoder(token)
     private var state = State.PREPARING
     private var failureReported = false
+    private var stopRequested = false
 
     fun onStderr(text: String) {
         decoder.append(text).mapNotNull(OdbDecodedLine::event).forEach(::accept)
     }
 
     fun onTerminated(exitCode: Int) {
+        if (stopRequested) return
         if (state == State.FATAL) return
         if (exitCode != 0) {
             failOnce("ODB process exited unexpectedly (exit code $exitCode).")
         } else if (state != State.DEBUGGER_READY) {
             failOnce("ODB process exited before the debugger was ready (exit code $exitCode).")
         }
+    }
+
+    fun onStopRequested() {
+        stopRequested = true
     }
 
     private fun accept(event: OdbEvent) {
@@ -38,7 +44,7 @@ class OdbSessionReporter(
             }
             is OdbEvent.Fatal -> {
                 state = State.FATAL
-                failOnce("${event.code}: ${event.message}")
+                if (!stopRequested) failOnce("${event.code}: ${event.message}")
             }
         }
     }

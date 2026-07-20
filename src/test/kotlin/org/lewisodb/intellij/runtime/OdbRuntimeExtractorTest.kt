@@ -119,6 +119,27 @@ class OdbRuntimeExtractorTest {
         assertEquals(1, Files.list(root.toRealPath()).use { it.count() })
     }
 
+    @Test
+    fun `preparation failure retains cleanup failure diagnostics`() {
+        val root = Files.createTempDirectory("odb-runtime-cleanup-failure").toRealPath()
+        val cleanupFailure = IOException("locked session state")
+        lateinit var retainedDirectory: Path
+        val extractor = OdbRuntimeExtractor(
+            root,
+            bundle(probeBytes(), manifest = "not-json"),
+            deleteSessionDirectory = { directory ->
+                retainedDirectory = directory
+                throw cleanupFailure
+            },
+        )
+
+        val error = assertThrows(OdbRuntimeException::class.java) { extractor.prepare() }
+
+        assertEquals("Invalid bundled ODB runtime manifest.", error.message)
+        assertEquals(listOf(cleanupFailure), error.suppressed.toList())
+        assertTrue(Files.exists(retainedDirectory))
+    }
+
     private fun probeBytes(): ByteArray = Files.readAllBytes(Path.of(System.getProperty("org.lewisodb.intellij.testProbe")))
 
     private fun bundle(

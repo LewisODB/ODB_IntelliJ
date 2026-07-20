@@ -67,6 +67,18 @@ class OdbSessionReporterTest {
         assertTrue(console.isEmpty())
     }
 
+    @Test
+    fun `requested Stop suppresses premature-exit failure`() {
+        val failures = mutableListOf<String>()
+        val reporter = OdbSessionReporter(token, {}, failures::add)
+        reporter.onStderr(event(1, "runtime-ready", "\"target\":\"example.Main\""))
+
+        reporter.onStopRequested()
+        reporter.onTerminated(143)
+
+        assertTrue(failures.isEmpty())
+    }
+
     private fun event(sequence: Long, type: String, data: String): String =
         "@@ODB-INTEGRATION@@\t$token\t{\"version\":1,\"sequence\":$sequence,\"type\":\"$type\",$data}\n"
 }

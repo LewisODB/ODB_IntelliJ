@@ -1,5 +1,7 @@
 package org.lewisodb.intellij.runtime
 
+import org.lewisodb.intellij.lifecycle.OdbCleanupResult
+import org.lewisodb.intellij.lifecycle.OdbSessionState
 import java.io.InputStream
 import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
@@ -8,7 +10,6 @@ import java.nio.file.StandardCopyOption
 import java.nio.file.StandardOpenOption
 import java.security.MessageDigest
 import java.security.SecureRandom
-import java.util.Comparator
 import java.util.jar.JarFile
 
 interface OdbRuntimeBundle {
@@ -21,10 +22,12 @@ fun interface OdbAtomicMover {
 }
 
 data class OdbPreparedRuntime(
-    val sessionDirectory: Path,
+    val session: OdbSessionState,
     val runtimeJar: Path,
     val token: String,
-)
+) {
+    val sessionDirectory: Path get() = session.directory
+}
 
 class OdbRuntimeExtractor(
     private val managedRoot: Path,
@@ -33,18 +36,17 @@ class OdbRuntimeExtractor(
         Files.move(source, target, StandardCopyOption.ATOMIC_MOVE)
     },
     private val tokenFactory: () -> String = ::randomToken,
+    private val deleteSessionDirectory: (Path) -> Unit = OdbSessionState::deleteTree,
 ) {
     fun prepare(): OdbPreparedRuntime {
         val root = prepareManagedRoot()
-        val session = try {
-            Files.createTempDirectory(root, "session-").toRealPath()
+        val sessionState = try {
+            val directory = Files.createTempDirectory(root, "session-").toRealPath()
+            OdbSessionState.create(root, directory, deleteSessionDirectory)
         } catch (error: Exception) {
             throw OdbRuntimeException("Could not create private ODB session state.", error)
         }
-        if (session.parent != root) {
-            deleteSession(session)
-            throw OdbRuntimeException("ODB session path escaped plugin-managed state.")
-        }
+        val session = sessionState.directory
 
         try {
             val manifest = readManifest()
@@ -59,16 +61,19 @@ class OdbRuntimeExtractor(
             if (!Files.isRegularFile(runtime)) {
                 throw OdbRuntimeException("Verified ODB runtime was not exposed after atomic move.")
             }
-            return OdbPreparedRuntime(session, runtime, validatedToken())
+            return OdbPreparedRuntime(sessionState, runtime, validatedToken())
         } catch (error: Exception) {
-            deleteSession(session)
-            if (error is OdbRuntimeException) throw error
-            val message = if (error is AtomicMoveNotSupportedException) {
-                "Atomic ODB runtime installation is unavailable."
-            } else {
-                "Could not prepare the bundled ODB runtime."
+            val preparationError = when {
+                error is OdbRuntimeException -> error
+                error is AtomicMoveNotSupportedException ->
+                    OdbRuntimeException("Atomic ODB runtime installation is unavailable.", error)
+                else -> OdbRuntimeException("Could not prepare the bundled ODB runtime.", error)
             }
-            throw OdbRuntimeException(message, error)
+            val cleanup = sessionState.cleanup()
+            if (cleanup is OdbCleanupResult.Failed) {
+                preparationError.addSuppressed(cleanup.cause)
+            }
+            throw preparationError
         }
     }
 
@@ -144,14 +149,6 @@ class OdbRuntimeExtractor(
     private fun validatedToken(): String = tokenFactory().also {
         if (!it.matches(Regex("[0-9a-f]{32}"))) {
             throw OdbRuntimeException("Generated ODB session token is invalid.")
-        }
-    }
-
-    private fun deleteSession(session: Path) {
-        try {
-            Files.walk(session).sorted(Comparator.reverseOrder()).forEach(Files::deleteIfExists)
-        } catch (_: Exception) {
-            // A later stale-session sweep handles residue that cannot be removed now.
         }
     }
 
