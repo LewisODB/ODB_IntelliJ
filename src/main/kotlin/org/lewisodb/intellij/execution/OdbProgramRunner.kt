@@ -1,6 +1,7 @@
 package org.lewisodb.intellij.execution
 
 import com.intellij.execution.ExecutionException
+import com.intellij.execution.ExecutionResult
 import com.intellij.execution.application.ApplicationConfiguration
 import com.intellij.execution.configurations.JavaCommandLineState
 import com.intellij.execution.configurations.RunProfile
@@ -9,14 +10,30 @@ import com.intellij.execution.runners.ExecutionEnvironment
 import com.intellij.execution.runners.GenericProgramRunner
 import com.intellij.execution.ui.RunContentDescriptor
 import com.intellij.execution.runners.RunContentBuilder
+import com.intellij.execution.process.ProcessEvent
+import com.intellij.execution.process.ProcessListener
+import com.intellij.execution.process.ProcessOutputTypes
+import com.intellij.execution.ui.ConsoleView
+import com.intellij.execution.ui.ConsoleViewContentType
+import com.intellij.notification.NotificationGroupManager
+import com.intellij.notification.NotificationType
+import com.intellij.openapi.application.PathManager
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.util.Key
 import org.lewisodb.intellij.launch.OdbLaunchPlan
 import org.lewisodb.intellij.launch.OdbPreflight
-import java.nio.file.Files
+import org.lewisodb.intellij.protocol.OdbSessionReporter
+import org.lewisodb.intellij.runtime.ClasspathOdbRuntimeBundle
+import org.lewisodb.intellij.runtime.FileOdbRuntimeBundle
+import org.lewisodb.intellij.runtime.OdbPreparedRuntime
+import org.lewisodb.intellij.runtime.OdbRuntimeBundle
+import org.lewisodb.intellij.runtime.OdbRuntimeException
+import org.lewisodb.intellij.runtime.OdbRuntimeExtractor
 import java.nio.file.Path
 
 open class OdbProgramRunner internal constructor(
     private val preflight: OdbPreflight = OdbPreflight(),
+    private val prepareRuntime: () -> OdbPreparedRuntime = ::prepareDefaultRuntime,
 ) : GenericProgramRunner<RunnerSettings>() {
     override fun getRunnerId(): String = RUNNER_ID
 
@@ -29,8 +46,13 @@ open class OdbProgramRunner internal constructor(
     ): RunContentDescriptor? {
         val parameters = preflight.resolve(environment.runProfile, state, environment.targetEnvironmentRequest)
         val javaState = state as JavaCommandLineState
-        val probe = probePath()
-        OdbLaunchPlan(probe).applyTo(parameters)
+        val runtime = try {
+            prepareRuntime()
+        } catch (error: OdbRuntimeException) {
+            throw ExecutionException(RUNTIME_MISSING_MESSAGE, error)
+        }
+        environment.putUserData(PREPARED_RUNTIME_KEY, runtime)
+        OdbLaunchPlan(runtime.runtimeJar, runtime.sessionDirectory, runtime.token).applyTo(parameters)
         return super.doExecute(javaState, environment)
     }
 
@@ -42,28 +64,59 @@ open class OdbProgramRunner internal constructor(
     ): RunContentDescriptor {
         val result = state.execute(environment.executor, this)
             ?: throw ExecutionException("Run with ODB did not start a process.")
+        observeSession(project, environment, result)
         onProcessStarted(environment.runnerSettings, result)
         return RunContentBuilder(result, environment).showRunContent(contentToReuse)
     }
 
-    private fun probePath(): Path {
-        val configured = System.getProperty(PROBE_PATH_PROPERTY)
-            ?: throw ExecutionException(RUNTIME_MISSING_MESSAGE)
-        val path = try {
-            Path.of(configured).toAbsolutePath().normalize()
-        } catch (_: RuntimeException) {
-            throw ExecutionException(RUNTIME_MISSING_MESSAGE)
-        }
-        if (!Files.isRegularFile(path) || !Files.isReadable(path)) {
-            throw ExecutionException(RUNTIME_MISSING_MESSAGE)
-        }
-        return path
+    private fun observeSession(project: Project, environment: ExecutionEnvironment, result: ExecutionResult) {
+        val prepared = environment.getUserData(PREPARED_RUNTIME_KEY)
+            ?: throw ExecutionException("Run with ODB lost its prepared runtime state.")
+        val console = result.executionConsole as? ConsoleView
+        console?.print("Bundled ODB runtime prepared.\n", ConsoleViewContentType.SYSTEM_OUTPUT)
+        val reporter = OdbSessionReporter(
+            prepared.token,
+            printStatus = { console?.print(it, ConsoleViewContentType.SYSTEM_OUTPUT) },
+            reportFailure = { message ->
+                NotificationGroupManager.getInstance()
+                    .getNotificationGroup(NOTIFICATION_GROUP_ID)
+                    .createNotification("Run with ODB failed", message, NotificationType.ERROR)
+                    .notify(project)
+            },
+        )
+        result.processHandler.addProcessListener(object : ProcessListener {
+            override fun onTextAvailable(event: ProcessEvent, outputType: Key<*>) {
+                if (outputType == ProcessOutputTypes.STDERR) reporter.onStderr(event.text)
+            }
+
+            override fun processTerminated(event: ProcessEvent) {
+                reporter.onTerminated(event.exitCode)
+            }
+        })
     }
 
     companion object {
         const val RUNNER_ID = "LewisOdbProgramRunner"
         const val PROBE_PATH_PROPERTY = "org.lewisodb.intellij.testProbe"
+        const val PROBE_MANIFEST_PATH_PROPERTY = "org.lewisodb.intellij.testProbeManifest"
         const val RUNTIME_MISSING_MESSAGE =
             "Run with ODB is incomplete: the bundled ODB runtime is missing or unreadable. Reinstall the plugin."
+        private const val NOTIFICATION_GROUP_ID = "Lewis ODB"
+        private val PREPARED_RUNTIME_KEY = Key.create<OdbPreparedRuntime>("lewis.odb.prepared.runtime")
+
+        private fun prepareDefaultRuntime(): OdbPreparedRuntime {
+            val root = PathManager.getSystemDir().resolve("lewis-odb").resolve("sessions")
+            return OdbRuntimeExtractor(root, defaultBundle()).prepare()
+        }
+
+        private fun defaultBundle(): OdbRuntimeBundle {
+            val probe = System.getProperty(PROBE_PATH_PROPERTY)
+            val manifest = System.getProperty(PROBE_MANIFEST_PATH_PROPERTY)
+            return if (probe != null && manifest != null) {
+                FileOdbRuntimeBundle(Path.of(manifest), Path.of(probe))
+            } else {
+                ClasspathOdbRuntimeBundle()
+            }
+        }
     }
 }

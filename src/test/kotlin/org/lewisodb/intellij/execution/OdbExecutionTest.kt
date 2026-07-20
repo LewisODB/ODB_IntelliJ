@@ -92,7 +92,7 @@ class OdbExecutionTest : BasePlatformTestCase() {
             classPath.add("/target/classes")
         }
 
-        OdbLaunchPlan(Path.of("/probe/odb-probe.jar")).applyTo(parameters)
+        OdbLaunchPlan(Path.of("/probe/odb-probe.jar"), Path.of("/managed/session"), TOKEN).applyTo(parameters)
 
         assertEquals("com.lambda.Debugger.IntegrationLauncher", parameters.mainClass)
         assertArrayEquals(
@@ -103,6 +103,8 @@ class OdbExecutionTest : BasePlatformTestCase() {
         assertEquals("kept", parameters.vmParametersList.getPropertyValue("fixture.property"))
         assertEquals(mapOf("FIXTURE_ENV" to "kept"), parameters.env)
         assertEquals("/tmp/fixture work", parameters.workingDirectory)
+        assertEquals("/managed/session", parameters.vmParametersList.getPropertyValue(OdbLaunchPlan.STATE_DIRECTORY_PROPERTY))
+        assertEquals(TOKEN, parameters.vmParametersList.getPropertyValue(OdbLaunchPlan.TOKEN_PROPERTY))
         assertEquals(before, serialize(configuration))
     }
 
@@ -121,7 +123,8 @@ class OdbExecutionTest : BasePlatformTestCase() {
             this.workingDirectory = workingDirectory.toString()
         }
 
-        OdbLaunchPlan(adapterJar).applyTo(parameters)
+        val session = Files.createTempDirectory("odb-probe-session")
+        OdbLaunchPlan(adapterJar, session, TOKEN).applyTo(parameters)
         val stdin = Files.createTempFile("odb-stdin", ".txt").also { Files.writeString(it, "from-stdin\n") }
         val commandLine = parameters.toCommandLine().withInput(stdin.toFile())
         val output = CapturingProcessHandler(commandLine).runProcess(10_000)
@@ -135,8 +138,33 @@ class OdbExecutionTest : BasePlatformTestCase() {
         assertTrue(output.stdout.contains("arg1=two words"))
         assertTrue(output.stdout.contains("arg2=السلام"))
         assertTrue(output.stdout.contains("stdin=from-stdin"))
+        assertTrue(output.stdout.contains("integration-token-cleared=true"))
+        assertTrue(output.stdout.contains("integration-state-cleared=true"))
         assertTrue(output.stderr.contains("fixture-stderr"))
         assertEquals(listOf(adapterJar.toString(), applicationJar.toString()), parameters.classPath.pathList)
+    }
+
+    fun testProbeEventsUseCapturedStderrAfterTargetReplacesSystemErr() {
+        val adapterJar = Path.of(System.getProperty(OdbProgramRunner.PROBE_PATH_PROPERTY))
+        val applicationJar = Path.of(System.getProperty("org.lewisodb.intellij.testApplication"))
+        val session = Files.createTempDirectory("odb-probe-stderr-session")
+        val parameters = JavaParameters().apply {
+            jdk = JavaSdk.getInstance().createJdk(
+                "odb-stderr-jdk8",
+                System.getProperty("org.lewisodb.intellij.testJdk8"),
+                false,
+            )
+            mainClass = "org.lewisodb.fixture.FixtureMain"
+            classPath.add(applicationJar.toString())
+            programParametersList.add("--replace-stderr")
+        }
+        OdbLaunchPlan(adapterJar, session, TOKEN).applyTo(parameters)
+
+        val output = CapturingProcessHandler(parameters.toCommandLine()).runProcess(10_000)
+
+        assertEquals(0, output.exitCode)
+        assertTrue(output.stderr, output.stderr.contains("\"type\":\"recording-started\""))
+        assertTrue(output.stderr, output.stderr.contains("\"type\":\"debugger-ready\""))
     }
 
     fun testRealJavaApplicationDelegatesThroughIntellijRunnerAndConsole() {
@@ -186,6 +214,10 @@ class OdbExecutionTest : BasePlatformTestCase() {
         assertTrue(console.text, console.text.contains("arg1=two words"))
         assertTrue(console.text, console.text.contains("stdin=from-stdin"))
         assertTrue(console.text, console.text.contains("fixture-stderr"))
+        assertTrue(console.text, console.text.contains("Bundled ODB runtime prepared."))
+        assertTrue(console.text, console.text.contains("Loading org.lewisodb.fixture.FixtureMain with ODB..."))
+        assertTrue(console.text, console.text.contains("ODB recording started."))
+        assertTrue(console.text, console.text.contains("ODB debugger ready."))
         assertEquals(before, serialize(configuration))
 
         val normalExecutor = DefaultRunExecutor.getRunExecutorInstance()
@@ -213,4 +245,8 @@ class OdbExecutionTest : BasePlatformTestCase() {
 
     private fun serialize(configuration: ApplicationConfiguration): String =
         JDOMUtil.writeElement(Element("configuration").also(configuration::writeExternal))
+
+    companion object {
+        private const val TOKEN = "0123456789abcdef0123456789abcdef"
+    }
 }

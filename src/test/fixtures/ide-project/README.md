@@ -8,6 +8,9 @@
 4. Confirm the Run console contains:
 
    ```text
+   Bundled ODB runtime prepared.
+   Loading org.lewisodb.fixture.FixtureMain with ODB...
+   ODB target loaded.
    property=kept
    java=1.8.0_492
    env=kept
@@ -16,6 +19,8 @@
    arg2=السلام
    stdin=from-stdin
    fixture-stderr
+   ODB recording started.
+   ODB debugger ready.
    ```
 
 5. Delete `out/`, rerun **Run with ODB**, and confirm the before-run Make step recreates `out/production/odb-fixture`.
