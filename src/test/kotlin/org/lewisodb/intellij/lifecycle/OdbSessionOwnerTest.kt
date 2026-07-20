@@ -54,6 +54,45 @@ class OdbSessionOwnerTest {
         assertFalse(Files.exists(directory))
     }
 
+    @Test
+    fun `concurrent handlers retain separate lifecycle ownership`() {
+        val root = Files.createTempDirectory("odb-owner-concurrent-root").toRealPath()
+        val firstDirectory = Files.createTempDirectory(root, "session-").toRealPath()
+        val secondDirectory = Files.createTempDirectory(root, "session-").toRealPath()
+        val first = NopProcessHandler().also { it.startNotify() }
+        val second = NopProcessHandler().also { it.startNotify() }
+        val owner = OdbSessionOwner()
+
+        owner.supervise(first, OdbSessionState.create(root, firstDirectory), OdbSessionReporter(TOKEN, {}, {}))
+        owner.supervise(second, OdbSessionState.create(root, secondDirectory), OdbSessionReporter(TOKEN, {}, {}))
+        first.destroyProcess()
+
+        assertFalse(Files.exists(firstDirectory))
+        assertTrue(Files.exists(secondDirectory))
+        assertFalse(second.isProcessTerminated)
+
+        second.destroyProcess()
+        assertFalse(Files.exists(secondDirectory))
+    }
+
+    @Test
+    fun `process that terminates before identity capture cleans without failure`() {
+        val root = Files.createTempDirectory("odb-owner-fast-exit-root").toRealPath()
+        val session = OdbSessionState.createManaged(
+            root,
+            OdbProcessIdentity(101, java.time.Instant.parse("2026-07-20T12:00:00Z")),
+        )
+        val handler = NopProcessHandler().also {
+            it.startNotify()
+            it.destroyProcess()
+        }
+        val owner = OdbSessionOwner { null }
+
+        owner.supervise(handler, session, OdbSessionReporter(TOKEN, {}, {}))
+
+        assertFalse(Files.exists(session.directory))
+    }
+
     companion object {
         private const val TOKEN = "0123456789abcdef0123456789abcdef"
     }

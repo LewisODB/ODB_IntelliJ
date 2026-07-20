@@ -14,11 +14,11 @@ import com.intellij.execution.ui.ConsoleView
 import com.intellij.execution.ui.ConsoleViewContentType
 import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
-import com.intellij.openapi.application.PathManager
 import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Key
 import org.lewisodb.intellij.lifecycle.OdbSessionOwner
+import org.lewisodb.intellij.lifecycle.OdbSessionPaths
 import org.lewisodb.intellij.launch.OdbLaunchPlan
 import org.lewisodb.intellij.launch.OdbPreflight
 import org.lewisodb.intellij.protocol.OdbSessionReporter
@@ -101,8 +101,12 @@ open class OdbProgramRunner internal constructor(
             },
         )
         val owner = sessionOwner(project)
-        owner.supervise(result.processHandler, prepared.session, reporter)
         environment.putUserData(PREPARED_RUNTIME_KEY, null)
+        try {
+            owner.supervise(result.processHandler, prepared.session, reporter)
+        } catch (error: Exception) {
+            throw ExecutionException("Run with ODB could not record its child process identity.", error)
+        }
         console?.print("Bundled ODB runtime prepared.\n", ConsoleViewContentType.SYSTEM_OUTPUT)
         return owner
     }
@@ -117,8 +121,7 @@ open class OdbProgramRunner internal constructor(
         private val PREPARED_RUNTIME_KEY = Key.create<OdbPreparedRuntime>("lewis.odb.prepared.runtime")
 
         private fun prepareDefaultRuntime(): OdbPreparedRuntime {
-            val root = PathManager.getSystemDir().resolve("lewis-odb").resolve("sessions")
-            return OdbRuntimeExtractor(root, defaultBundle()).prepare()
+            return OdbRuntimeExtractor(OdbSessionPaths.managedRoot(), defaultBundle()).prepare()
         }
 
         private fun defaultBundle(): OdbRuntimeBundle {

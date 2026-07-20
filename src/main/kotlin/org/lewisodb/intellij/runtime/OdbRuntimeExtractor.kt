@@ -1,6 +1,8 @@
 package org.lewisodb.intellij.runtime
 
 import org.lewisodb.intellij.lifecycle.OdbCleanupResult
+import org.lewisodb.intellij.lifecycle.JvmOdbProcessInspector
+import org.lewisodb.intellij.lifecycle.OdbProcessIdentity
 import org.lewisodb.intellij.lifecycle.OdbSessionState
 import java.io.InputStream
 import java.nio.file.AtomicMoveNotSupportedException
@@ -37,13 +39,24 @@ class OdbRuntimeExtractor(
     },
     private val tokenFactory: () -> String = ::randomToken,
     private val deleteSessionDirectory: (Path) -> Unit = OdbSessionState::deleteTree,
+    private val ownerIdentityFactory: () -> OdbProcessIdentity? = {
+        JvmOdbProcessInspector.identify(ProcessHandle.current())
+    },
+    private val sessionIdFactory: () -> String = { java.util.UUID.randomUUID().toString() },
 ) {
     fun prepare(): OdbPreparedRuntime {
         val root = prepareManagedRoot()
         val sessionState = try {
-            val directory = Files.createTempDirectory(root, "session-").toRealPath()
-            OdbSessionState.create(root, directory, deleteSessionDirectory)
+            val ownerIdentity = ownerIdentityFactory()
+                ?: throw OdbRuntimeException("Could not identify the IDE owner process.")
+            OdbSessionState.createManaged(
+                root,
+                ownerIdentity,
+                sessionIdFactory,
+                deleteSessionDirectory,
+            )
         } catch (error: Exception) {
+            if (error is OdbRuntimeException) throw error
             throw OdbRuntimeException("Could not create private ODB session state.", error)
         }
         val session = sessionState.directory

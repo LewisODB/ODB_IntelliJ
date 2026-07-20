@@ -19,6 +19,7 @@
     <extensions defaultExtensionNs="com.intellij">
         <executor implementation="org.lewisodb.intellij.execution.OdbExecutor"/>
         <programRunner implementation="org.lewisodb.intellij.execution.OdbProgramRunner"/>
+        <backgroundPostStartupActivity implementation="org.lewisodb.intellij.lifecycle.OdbRecoveryStartupActivity"/>
         <notificationGroup id="Lewis ODB" displayType="BALLOON" isLogByDefault="true"/>
     </extensions>
 </idea-plugin>

@@ -8,11 +8,54 @@ import org.junit.Assert.assertThrows
 import org.junit.Test
 import java.io.IOException
 import java.nio.file.Files
+import java.time.Instant
 import java.util.concurrent.Callable
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicInteger
 
 class OdbSessionStateTest {
+    @Test
+    fun `managed session records owner then child identity`() {
+        val root = Files.createTempDirectory("odb-metadata-root").toRealPath()
+        val owner = OdbProcessIdentity(101, Instant.parse("2026-07-20T12:00:00Z"))
+        val child = OdbProcessIdentity(202, Instant.parse("2026-07-20T12:00:01Z"))
+        val session = OdbSessionState.createManaged(
+            root,
+            owner,
+            sessionIdFactory = { "11111111-1111-1111-1111-111111111111" },
+        )
+
+        session.recordChild(child)
+
+        assertEquals(
+            """{"version":1,"sessionId":"11111111-1111-1111-1111-111111111111","ideOwner":{"pid":101,"startedAt":"2026-07-20T12:00:00Z"},"odbChild":{"pid":202,"startedAt":"2026-07-20T12:00:01Z"}}""",
+            Files.readString(session.directory.resolve("session.json")),
+        )
+    }
+
+    @Test
+    fun `failed child metadata replace keeps last complete metadata`() {
+        val root = Files.createTempDirectory("odb-metadata-failure-root").toRealPath()
+        val moves = AtomicInteger()
+        val session = OdbSessionState.createManaged(
+            root,
+            OdbProcessIdentity(101, Instant.parse("2026-07-20T12:00:00Z")),
+            sessionIdFactory = { "22222222-2222-2222-2222-222222222222" },
+            metadataMover = OdbMetadataMover { source, target ->
+                if (moves.getAndIncrement() > 0) throw IOException("replace failed")
+                Files.move(source, target, java.nio.file.StandardCopyOption.ATOMIC_MOVE)
+            },
+        )
+
+        assertThrows(IOException::class.java) {
+            session.recordChild(OdbProcessIdentity(202, Instant.parse("2026-07-20T12:00:01Z")))
+        }
+
+        val metadata = Files.readString(session.directory.resolve("session.json"))
+        assertTrue(metadata.contains("\"odbChild\":null"))
+        assertEquals(1, Files.list(session.directory).use { it.count() })
+    }
+
     @Test
     fun `cleanup deletes contained session state once`() {
         val root = Files.createTempDirectory("odb-managed-root").toRealPath()

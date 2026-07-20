@@ -1,5 +1,6 @@
 package org.lewisodb.intellij.lifecycle
 
+import com.intellij.execution.process.BaseProcessHandler
 import com.intellij.execution.process.ProcessEvent
 import com.intellij.execution.process.ProcessHandler
 import com.intellij.execution.process.ProcessListener
@@ -13,7 +14,11 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 
 @Service(Service.Level.PROJECT)
-class OdbSessionOwner : Disposable {
+class OdbSessionOwner(
+    private val childIdentityFactory: (ProcessHandler) -> OdbProcessIdentity? = { handler ->
+        (handler as? BaseProcessHandler<*>)?.process?.toHandle()?.let(JvmOdbProcessInspector::identify)
+    },
+) : Disposable {
     private val sessions = ConcurrentHashMap<ProcessHandler, OdbSessionState>()
     private val disposed = AtomicBoolean()
 
@@ -44,6 +49,19 @@ class OdbSessionOwner : Disposable {
                 complete(handler)
             }
         })
+        if (session.recordsProcessIdentity) {
+            try {
+                val childIdentity = childIdentityFactory(handler)
+                if (childIdentity != null) {
+                    session.recordChild(childIdentity)
+                } else if (!handler.isProcessTerminated && !handler.isProcessTerminating) {
+                    throw IllegalStateException("Could not identify the ODB child process.")
+                }
+            } catch (error: Exception) {
+                requestStop(handler)
+                throw error
+            }
+        }
         if (handler.isProcessTerminated) {
             reporter.onTerminated(handler.exitCode ?: UNKNOWN_EXIT_CODE)
             complete(handler)

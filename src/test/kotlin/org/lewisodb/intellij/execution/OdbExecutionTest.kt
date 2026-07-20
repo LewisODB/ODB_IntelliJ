@@ -10,6 +10,7 @@ import com.intellij.execution.configurations.RunProfileState
 import com.intellij.execution.configurations.JavaCommandLineState
 import com.intellij.execution.impl.ConsoleViewImpl
 import com.intellij.execution.process.CapturingProcessHandler
+import com.intellij.execution.process.BaseProcessHandler
 import com.intellij.execution.process.ProcessHandler
 import com.intellij.execution.configurations.RunnerSettings
 import com.intellij.execution.runners.ProgramRunner
@@ -20,8 +21,10 @@ import com.intellij.openapi.projectRoots.JavaSdk
 import com.intellij.openapi.projectRoots.ProjectJdkTable
 import com.intellij.openapi.application.WriteAction
 import com.intellij.openapi.util.Disposer
+import com.intellij.openapi.extensions.ExtensionPointName
 import com.intellij.openapi.util.JDOMUtil
 import com.intellij.openapi.roots.ModuleRootModificationUtil
+import com.intellij.openapi.startup.ProjectActivity
 import com.intellij.testFramework.PsiTestUtil
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
 import org.jdom.Element
@@ -33,6 +36,7 @@ import org.junit.Assert.assertTrue
 import org.lewisodb.intellij.launch.OdbLaunchPlan
 import org.lewisodb.intellij.launch.OdbPreflight
 import org.lewisodb.intellij.lifecycle.OdbSessionOwner
+import org.lewisodb.intellij.lifecycle.OdbRecoveryStartupActivity
 import org.lewisodb.intellij.runtime.FileOdbRuntimeBundle
 import org.lewisodb.intellij.runtime.OdbPreparedRuntime
 import org.lewisodb.intellij.runtime.OdbRuntimeExtractor
@@ -47,6 +51,10 @@ class OdbExecutionTest : BasePlatformTestCase() {
 
         val application = ApplicationConfiguration("fixture", project)
         assertTrue(ProgramRunner.getRunner(OdbExecutor.ID, application) is OdbProgramRunner)
+        val startupActivities = ExtensionPointName
+            .create<ProjectActivity>("com.intellij.backgroundPostStartupActivity")
+            .extensionList
+        assertTrue(startupActivities.any { it is OdbRecoveryStartupActivity })
     }
 
     fun testRunnerAcceptsOnlyOdbJavaApplications() {
@@ -265,6 +273,9 @@ class OdbExecutionTest : BasePlatformTestCase() {
         assertSame(runner.delegatedHandler, running.handler)
         assertFalse(running.handler.isProcessTerminated)
         assertTrue(Files.exists(prepared.sessionDirectory))
+        val childPid = (running.handler as BaseProcessHandler<*>).process.pid()
+        val metadata = Files.readString(prepared.sessionDirectory.resolve("session.json"))
+        assertTrue(metadata, metadata.contains("\"odbChild\":{\"pid\":$childPid"))
 
         running.handler.destroyProcess()
 

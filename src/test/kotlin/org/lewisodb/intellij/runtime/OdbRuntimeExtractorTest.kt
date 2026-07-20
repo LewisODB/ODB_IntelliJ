@@ -36,6 +36,9 @@ class OdbRuntimeExtractorTest {
         assertTrue(Files.isRegularFile(prepared.runtimeJar))
         assertArrayEquals(runtime, Files.readAllBytes(prepared.runtimeJar))
         assertTrue(prepared.token.matches(Regex("[0-9a-f]{32}")))
+        val metadata = Files.readString(prepared.sessionDirectory.resolve("session.json"))
+        assertTrue(metadata, metadata.contains("\"pid\":${ProcessHandle.current().pid()}"))
+        assertTrue(metadata, metadata.contains("\"odbChild\":null"))
     }
 
     @Test
@@ -50,6 +53,22 @@ class OdbRuntimeExtractorTest {
         assertNotEquals(prepared[0].sessionDirectory, prepared[1].sessionDirectory)
         assertNotEquals(prepared[0].runtimeJar, prepared[1].runtimeJar)
         assertNotEquals(prepared[0].token, prepared[1].token)
+    }
+
+    @Test
+    fun `rerun after cleanup creates fresh session state`() {
+        val root = Files.createTempDirectory("odb-runtime-rerun")
+        val extractor = OdbRuntimeExtractor(root, bundle(probeBytes()))
+        val first = extractor.prepare()
+
+        first.session.cleanup()
+        val second = extractor.prepare()
+
+        assertNotEquals(first.sessionDirectory, second.sessionDirectory)
+        assertNotEquals(first.runtimeJar, second.runtimeJar)
+        assertNotEquals(first.token, second.token)
+        assertFalse(Files.exists(first.sessionDirectory))
+        assertTrue(Files.exists(second.sessionDirectory))
     }
 
     @Test
