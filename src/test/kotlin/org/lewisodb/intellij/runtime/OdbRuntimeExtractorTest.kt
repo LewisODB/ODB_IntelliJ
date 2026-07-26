@@ -159,7 +159,8 @@ class OdbRuntimeExtractorTest {
         assertTrue(Files.exists(retainedDirectory))
     }
 
-    private fun probeBytes(): ByteArray = Files.readAllBytes(Path.of(System.getProperty("org.lewisodb.intellij.testProbe")))
+    private fun probeBytes(): ByteArray =
+        Files.readAllBytes(Path.of(System.getProperty("org.lewisodb.intellij.runtime")))
 
     private fun bundle(
         runtime: ByteArray,

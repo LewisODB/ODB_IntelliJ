@@ -113,8 +113,8 @@ open class OdbProgramRunner internal constructor(
 
     companion object {
         const val RUNNER_ID = "LewisOdbProgramRunner"
-        const val PROBE_PATH_PROPERTY = "org.lewisodb.intellij.testProbe"
-        const val PROBE_MANIFEST_PATH_PROPERTY = "org.lewisodb.intellij.testProbeManifest"
+        const val RUNTIME_PATH_PROPERTY = "org.lewisodb.intellij.runtime"
+        const val RUNTIME_MANIFEST_PATH_PROPERTY = "org.lewisodb.intellij.runtimeManifest"
         const val RUNTIME_MISSING_MESSAGE =
             "Run with ODB is incomplete: the bundled ODB runtime is missing or unreadable. Reinstall the plugin."
         private const val NOTIFICATION_GROUP_ID = "Lewis ODB"
@@ -125,12 +125,12 @@ open class OdbProgramRunner internal constructor(
         }
 
         private fun defaultBundle(): OdbRuntimeBundle {
-            val probe = System.getProperty(PROBE_PATH_PROPERTY)
-            val manifest = System.getProperty(PROBE_MANIFEST_PATH_PROPERTY)
-            return if (probe != null && manifest != null) {
-                FileOdbRuntimeBundle(Path.of(manifest), Path.of(probe))
-            } else {
-                ClasspathOdbRuntimeBundle()
+            val runtime = System.getProperty(RUNTIME_PATH_PROPERTY)
+            val manifest = System.getProperty(RUNTIME_MANIFEST_PATH_PROPERTY)
+            return when {
+                runtime == null && manifest == null -> ClasspathOdbRuntimeBundle()
+                runtime != null && manifest != null -> FileOdbRuntimeBundle(Path.of(manifest), Path.of(runtime))
+                else -> throw OdbRuntimeException("ODB runtime and manifest overrides must be provided together.")
             }
         }
     }

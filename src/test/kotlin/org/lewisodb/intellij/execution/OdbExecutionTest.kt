@@ -126,7 +126,7 @@ class OdbExecutionTest : BasePlatformTestCase() {
 
     fun testFiniteJava8ProbePreservesResolvedLaunchAndOutput() {
         val workingDirectory = Files.createTempDirectory("odb fixture ")
-        val adapterJar = Path.of(System.getProperty(OdbProgramRunner.PROBE_PATH_PROPERTY))
+        val adapterJar = Path.of(System.getProperty(OdbProgramRunner.RUNTIME_PATH_PROPERTY))
         val applicationJar = Path.of(System.getProperty("org.lewisodb.intellij.testApplication"))
         val jdk8 = System.getProperty("org.lewisodb.intellij.testJdk8")
         val parameters = JavaParameters().apply {
@@ -161,7 +161,7 @@ class OdbExecutionTest : BasePlatformTestCase() {
     }
 
     fun testProbeEventsUseCapturedStderrAfterTargetReplacesSystemErr() {
-        val adapterJar = Path.of(System.getProperty(OdbProgramRunner.PROBE_PATH_PROPERTY))
+        val adapterJar = Path.of(System.getProperty(OdbProgramRunner.RUNTIME_PATH_PROPERTY))
         val applicationJar = Path.of(System.getProperty("org.lewisodb.intellij.testApplication"))
         val session = Files.createTempDirectory("odb-probe-stderr-session")
         val parameters = JavaParameters().apply {
@@ -250,7 +250,7 @@ class OdbExecutionTest : BasePlatformTestCase() {
         val normalState = configuration.getState(normalExecutor, normalEnvironment) as JavaCommandLineState
         val normalParameters = normalState.javaParameters
         assertEquals("org.lewisodb.fixture.FixtureMain", normalParameters.mainClass)
-        assertFalse(normalParameters.classPath.pathList.contains(System.getProperty(OdbProgramRunner.PROBE_PATH_PROPERTY)))
+        assertFalse(normalParameters.classPath.pathList.contains(System.getProperty(OdbProgramRunner.RUNTIME_PATH_PROPERTY)))
         assertArrayEquals(
             arrayOf("one", "two words", "--read-stdin"),
             normalParameters.programParametersList.array,
@@ -384,8 +384,8 @@ class OdbExecutionTest : BasePlatformTestCase() {
     }
 
     private fun preparedRuntime(root: Path): OdbPreparedRuntime {
-        val runtime = Path.of(System.getProperty(OdbProgramRunner.PROBE_PATH_PROPERTY))
-        val manifest = Path.of(System.getProperty(OdbProgramRunner.PROBE_MANIFEST_PATH_PROPERTY))
+        val runtime = Path.of(System.getProperty(OdbProgramRunner.RUNTIME_PATH_PROPERTY))
+        val manifest = Path.of(System.getProperty(OdbProgramRunner.RUNTIME_MANIFEST_PATH_PROPERTY))
         return OdbRuntimeExtractor(root, FileOdbRuntimeBundle(manifest, runtime)).prepare()
     }
 
@@ -411,8 +411,8 @@ class OdbExecutionTest : BasePlatformTestCase() {
 
         companion object {
             private fun defaultPreparedRuntime(): OdbPreparedRuntime {
-                val runtime = Path.of(System.getProperty(OdbProgramRunner.PROBE_PATH_PROPERTY))
-                val manifest = Path.of(System.getProperty(OdbProgramRunner.PROBE_MANIFEST_PATH_PROPERTY))
+                val runtime = Path.of(System.getProperty(OdbProgramRunner.RUNTIME_PATH_PROPERTY))
+                val manifest = Path.of(System.getProperty(OdbProgramRunner.RUNTIME_MANIFEST_PATH_PROPERTY))
                 val root = Files.createTempDirectory("odb-test-runner-root").toRealPath()
                 return OdbRuntimeExtractor(root, FileOdbRuntimeBundle(manifest, runtime)).prepare()
             }

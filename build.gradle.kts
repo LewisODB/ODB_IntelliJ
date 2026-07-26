@@ -6,6 +6,7 @@ import org.gradle.jvm.tasks.Jar
 import org.gradle.process.CommandLineArgumentProvider
 import org.gradle.api.DefaultTask
 import org.gradle.api.file.RegularFileProperty
+import org.gradle.api.tasks.Exec
 import org.gradle.api.tasks.InputFile
 import org.gradle.api.tasks.OutputFile
 import org.gradle.api.tasks.TaskAction
@@ -14,7 +15,7 @@ import java.io.ByteArrayInputStream
 import java.util.zip.ZipInputStream
 import org.gradle.api.tasks.bundling.Zip
 
-abstract class WriteProbeRuntimeManifest : DefaultTask() {
+abstract class WriteRuntimeManifest : DefaultTask() {
     @get:InputFile
     abstract val runtimeJar: RegularFileProperty
 
@@ -25,8 +26,8 @@ abstract class WriteProbeRuntimeManifest : DefaultTask() {
     fun writeManifest() {
         val runtime = runtimeJar.get().asFile.readBytes()
         val digest = MessageDigest.getInstance("SHA-256").digest(runtime).joinToString("") { "%02x".format(it) }
-        val commit = "0123456789abcdef0123456789abcdef01234567"
-        val manifest = """{"sourceRepository":"https://github.com/LewisODB/OmniscientDebugger","sourceCommit":"$commit","artifact":"odb-runtime.jar","sha256":"$digest","sourceArchive":"odb-source-$commit.tar.gz","sourceSha256":"${"b".repeat(64)}","javaClassVersion":52,"integrationProtocol":1,"dependencies":{"org.apache.bcel:bcel":"6.12.0","org.apache.commons:commons-lang3":"3.20.0","commons-io:commons-io":"2.21.0","org.ow2.asm:asm":"9.7.1"}}"""
+        val manifest =
+            """{"artifact":"odb-runtime.jar","sha256":"$digest","javaClassVersion":52,"integrationProtocol":1}"""
         outputManifest.get().asFile.apply {
             parentFile.mkdirs()
             writeText(manifest)
@@ -148,10 +149,32 @@ val probeApplicationJar by tasks.registering(Jar::class) {
 }
 
 val probeRuntimeManifest = layout.buildDirectory.file("probe/runtime.json")
-val writeProbeRuntimeManifest by tasks.registering(WriteProbeRuntimeManifest::class) {
+val writeProbeRuntimeManifest by tasks.registering(WriteRuntimeManifest::class) {
     dependsOn(probeAdapterJar)
     runtimeJar = probeAdapterJar.flatMap { it.archiveFile }
     outputManifest = probeRuntimeManifest
+}
+
+val localOdbCheckout = layout.projectDirectory.dir("LewisOmniscientDebugger")
+val localOdbRuntimeJar = localOdbCheckout.file("build/libs/LewisOmniscientDebugger.jar")
+val buildLocalOdbRuntime by tasks.registering(Exec::class) {
+    workingDir(localOdbCheckout)
+    commandLine(
+        "./gradlew",
+        "--no-daemon",
+        "--offline",
+        "clean",
+        "jar",
+        "verifyRuntimeDependencies",
+        "verifyRuntimeArtifact",
+    )
+}
+
+val localOdbRuntimeManifest = layout.buildDirectory.file("local-odb/runtime.json")
+val writeLocalOdbRuntimeManifest by tasks.registering(WriteRuntimeManifest::class) {
+    dependsOn(buildLocalOdbRuntime)
+    runtimeJar = localOdbRuntimeJar
+    outputManifest = localOdbRuntimeManifest
 }
 
 val testJdk8 = javaToolchains.launcherFor {
@@ -160,18 +183,18 @@ val testJdk8 = javaToolchains.launcherFor {
 
 tasks.test {
     dependsOn(writeProbeRuntimeManifest, probeApplicationJar)
-    systemProperty("org.lewisodb.intellij.testProbe", probeAdapterJar.flatMap { it.archiveFile }.get().asFile)
-    systemProperty("org.lewisodb.intellij.testProbeManifest", probeRuntimeManifest.get().asFile)
+    systemProperty("org.lewisodb.intellij.runtime", probeAdapterJar.flatMap { it.archiveFile }.get().asFile)
+    systemProperty("org.lewisodb.intellij.runtimeManifest", probeRuntimeManifest.get().asFile)
     systemProperty("org.lewisodb.intellij.testApplication", probeApplicationJar.flatMap { it.archiveFile }.get().asFile)
     systemProperty("org.lewisodb.intellij.testJdk8", testJdk8.get().metadata.installationPath.asFile)
 }
 
 tasks.runIde {
-    dependsOn(writeProbeRuntimeManifest)
+    dependsOn(writeLocalOdbRuntimeManifest)
     jvmArgumentProviders += CommandLineArgumentProvider {
         listOf(
-            "-Dorg.lewisodb.intellij.testProbe=${probeAdapterJar.get().archiveFile.get().asFile.absolutePath}",
-            "-Dorg.lewisodb.intellij.testProbeManifest=${probeRuntimeManifest.get().asFile.absolutePath}",
+            "-Dorg.lewisodb.intellij.runtime=${localOdbRuntimeJar.asFile.absolutePath}",
+            "-Dorg.lewisodb.intellij.runtimeManifest=${localOdbRuntimeManifest.get().asFile.absolutePath}",
         )
     }
     argumentProviders += CommandLineArgumentProvider {

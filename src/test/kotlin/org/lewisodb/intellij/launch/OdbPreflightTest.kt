@@ -281,9 +281,9 @@ class OdbPreflightTest : BasePlatformTestCase() {
     fun testRunnerRejectsMissingRuntimeBeforeStateExecution() {
         val launch = launch()
         val runner = TestableRunner(supportedPreflight())
-        val original = System.getProperty(OdbProgramRunner.PROBE_PATH_PROPERTY)
+        val original = System.getProperty(OdbProgramRunner.RUNTIME_PATH_PROPERTY)
         try {
-            System.setProperty(OdbProgramRunner.PROBE_PATH_PROPERTY, "/missing/odb-runtime.jar")
+            System.setProperty(OdbProgramRunner.RUNTIME_PATH_PROPERTY, "/missing/odb-runtime.jar")
 
             val error = failure { runner.executeState(launch.state, launch.environment) }
 
@@ -292,9 +292,30 @@ class OdbPreflightTest : BasePlatformTestCase() {
             assertEquals("sample.Main", launch.parameters.mainClass)
         } finally {
             if (original == null) {
-                System.clearProperty(OdbProgramRunner.PROBE_PATH_PROPERTY)
+                System.clearProperty(OdbProgramRunner.RUNTIME_PATH_PROPERTY)
             } else {
-                System.setProperty(OdbProgramRunner.PROBE_PATH_PROPERTY, original)
+                System.setProperty(OdbProgramRunner.RUNTIME_PATH_PROPERTY, original)
+            }
+        }
+    }
+
+    fun testRunnerRejectsPartialRuntimeOverrideBeforeStateExecution() {
+        val launch = launch()
+        val runner = TestableRunner(supportedPreflight())
+        val originalManifest = System.getProperty(OdbProgramRunner.RUNTIME_MANIFEST_PATH_PROPERTY)
+        try {
+            System.clearProperty(OdbProgramRunner.RUNTIME_MANIFEST_PATH_PROPERTY)
+
+            val error = failure { runner.executeState(launch.state, launch.environment) }
+
+            assertEquals(OdbProgramRunner.RUNTIME_MISSING_MESSAGE, error.message)
+            assertEquals(0, launch.state.executionCount)
+            assertEquals("sample.Main", launch.parameters.mainClass)
+        } finally {
+            if (originalManifest == null) {
+                System.clearProperty(OdbProgramRunner.RUNTIME_MANIFEST_PATH_PROPERTY)
+            } else {
+                System.setProperty(OdbProgramRunner.RUNTIME_MANIFEST_PATH_PROPERTY, originalManifest)
             }
         }
     }

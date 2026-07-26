@@ -13,6 +13,7 @@ public final class FixtureMain {
         System.out.println("java=" + System.getProperty("java.version"));
         System.out.println("env=" + System.getenv("FIXTURE_ENV"));
         System.out.println("cwd=" + System.getProperty("user.dir"));
+        System.out.println("classpath-contains-fixture=" + System.getProperty("java.class.path").contains("odb-fixture"));
         System.out.println("integration-token-cleared=" + (System.getProperty("com.lambda.Debugger.integration.token") == null));
         System.out.println("integration-state-cleared=" + (System.getProperty("com.lambda.Debugger.integration.stateDir") == null));
         for (int i = 0; i < args.length; i++) {
