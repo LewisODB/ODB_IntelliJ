@@ -76,6 +76,7 @@ class OdbExecutionTest : BasePlatformTestCase() {
         val configuration = ApplicationConfiguration("fixture", project)
         configuration.readExternal(fixture)
 
+        assertEquals("org.lewisodb.demo.ReverseLinkedListDemo", configuration.mainClassName)
         assertTrue(configuration.inputRedirectOptions.isRedirectInput)
         assertEquals("\$PROJECT_DIR\$/input.txt", configuration.inputRedirectOptions.redirectInputPath)
         val make = fixture.getChild("method").getChildren("option").single { it.getAttributeValue("name") == "Make" }
@@ -158,6 +159,30 @@ class OdbExecutionTest : BasePlatformTestCase() {
         assertTrue(output.stdout.contains("integration-state-cleared=true"))
         assertTrue(output.stderr.contains("fixture-stderr"))
         assertEquals(listOf(adapterJar.toString(), applicationJar.toString()), parameters.classPath.pathList)
+    }
+
+    fun testReverseLinkedListDemoReproducesInspectableBug() {
+        val applicationJar = Path.of(System.getProperty("org.lewisodb.intellij.testApplication"))
+        val parameters = JavaParameters().apply {
+            jdk = JavaSdk.getInstance().createJdk(
+                "odb-demo-jdk8",
+                System.getProperty("org.lewisodb.intellij.testJdk8"),
+                false,
+            )
+            mainClass = "org.lewisodb.demo.ReverseLinkedListDemo"
+            classPath.add(applicationJar.toString())
+        }
+
+        val output = CapturingProcessHandler(parameters.toCommandLine()).runProcess(10_000)
+
+        assertEquals(0, output.exitCode)
+        assertTrue(output.stdout.contains("Input:    5 -> 4 -> 3 -> 2 -> 1"))
+        assertTrue(output.stdout.contains("Expected: 1 -> 2 -> 3 -> 4 -> 5"))
+        assertTrue(output.stdout.contains("step=5 current=1 next=null previous=null"))
+        assertTrue(output.stdout.contains("Actual:   null"))
+        assertTrue(output.stdout.contains("Links:    5->null, 4->null, 3->null, 2->null, 1->null"))
+        assertTrue(output.stdout.contains("Result:   BUG REPRODUCED"))
+        assertTrue(output.stderr.contains("demo-stderr"))
     }
 
     fun testProbeEventsUseCapturedStderrAfterTargetReplacesSystemErr() {

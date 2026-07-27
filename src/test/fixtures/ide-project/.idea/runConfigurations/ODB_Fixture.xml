@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="ODB Fixture" type="Application" factoryName="Application">
+  <configuration default="false" name="ODB Reverse Linked List Demo" type="Application" factoryName="Application">
     <envs>
       <env name="FIXTURE_ENV" value="kept" />
     </envs>
-    <option name="MAIN_CLASS_NAME" value="org.lewisodb.fixture.FixtureMain" />
+    <option name="MAIN_CLASS_NAME" value="org.lewisodb.demo.ReverseLinkedListDemo" />
     <module name="odb-fixture" />
     <option name="PROGRAM_PARAMETERS" value="one &quot;two words&quot; السلام --read-stdin" />
     <option name="REDIRECT_INPUT" value="true" />
