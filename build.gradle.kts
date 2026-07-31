@@ -1,22 +1,94 @@
+import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
 import org.jetbrains.intellij.platform.gradle.TestFrameworkType
+import org.jetbrains.intellij.platform.gradle.tasks.SignPluginTask
+import org.jetbrains.intellij.platform.gradle.tasks.VerifyPluginTask
+import org.jetbrains.intellij.platform.gradle.tasks.VerifyPluginSignatureTask
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.dsl.KotlinVersion
 import org.gradle.api.tasks.compile.JavaCompile
 import org.gradle.jvm.tasks.Jar
+import org.gradle.jvm.toolchain.JvmVendorSpec
 import org.gradle.process.CommandLineArgumentProvider
 import org.gradle.api.DefaultTask
+import org.gradle.api.tasks.Delete
 import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.provider.Property
 import org.gradle.api.tasks.Exec
 import org.gradle.api.tasks.Input
+import org.gradle.api.tasks.InputDirectory
 import org.gradle.api.tasks.InputFile
 import org.gradle.api.tasks.OutputFile
+import org.gradle.api.tasks.PathSensitive
+import org.gradle.api.tasks.PathSensitivity
 import org.gradle.api.tasks.TaskAction
+import org.gradle.api.tasks.Sync
 import groovy.json.JsonSlurper
 import java.security.MessageDigest
 import java.io.ByteArrayInputStream
+import java.util.EnumSet
 import java.util.zip.ZipInputStream
 import org.gradle.api.tasks.bundling.Zip
+
+abstract class VerifyInstalledZipSmoke : DefaultTask() {
+    @get:InputFile
+    @get:PathSensitive(PathSensitivity.NONE)
+    abstract val pluginZip: RegularFileProperty
+
+    @get:InputFile
+    @get:PathSensitive(PathSensitivity.NONE)
+    abstract val ideaLog: RegularFileProperty
+
+    @get:InputDirectory
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val inspectionOutput: org.gradle.api.file.DirectoryProperty
+
+    @get:Input
+    abstract val expectedIdeBuild: Property<String>
+
+    @get:OutputFile
+    abstract val reportFile: RegularFileProperty
+
+    @TaskAction
+    fun verify() {
+        val log = ideaLog.get().asFile.readText()
+        if (expectedIdeBuild.get() !in log) {
+            throw GradleException("Installed-ZIP smoke log does not identify IDEA ${expectedIdeBuild.get()}.")
+        }
+        val targetMarkers = listOf("Lewis ODB", "org.lewisodb")
+        if ("Loaded custom plugins: Lewis ODB" !in log || "id=org.lewisodb" !in log) {
+            throw GradleException("Installed-ZIP smoke log does not show the Lewis ODB plugin loading.")
+        }
+        val targetPluginErrors = log.lineSequence().filter { line ->
+            targetMarkers.any { it in line } &&
+                ("Cannot load" in line || "PluginException" in line || "ERROR" in line)
+        }.toList()
+        if (targetPluginErrors.isNotEmpty()) {
+            throw GradleException("Installed-ZIP smoke found target plugin errors: $targetPluginErrors")
+        }
+        val outputFiles = inspectionOutput.get().asFile.walkTopDown().filter { it.isFile }.toList()
+        if (outputFiles.isEmpty()) {
+            throw GradleException("Installed-ZIP smoke did not produce inspection output for the fixture project.")
+        }
+
+        val zip = pluginZip.get().asFile
+        val digest = MessageDigest.getInstance("SHA-256").digest(zip.readBytes())
+            .joinToString("") { "%02x".format(it) }
+        reportFile.get().asFile.apply {
+            parentFile.mkdirs()
+            writeText(
+                buildString {
+                    appendLine("pluginZip=${zip.name}")
+                    appendLine("pluginSha256=$digest")
+                    appendLine("ideBuild=${expectedIdeBuild.get()}")
+                    appendLine("pluginLoaded=true")
+                    appendLine("projectOpened=true")
+                    appendLine("ideClosed=true")
+                    appendLine("inspectionFiles=${outputFiles.size}")
+                },
+            )
+        }
+    }
+}
 
 abstract class WriteRuntimeManifest : DefaultTask() {
     @get:InputFile
@@ -362,12 +434,15 @@ dependencies {
         bundledPlugin("com.intellij.java")
         testFramework(TestFrameworkType.Platform)
         testFramework(TestFrameworkType.Plugin.Java)
+        pluginVerifier("1.409")
+        zipSigner("0.1.43")
     }
 }
 
 java {
     toolchain {
         languageVersion = JavaLanguageVersion.of(21)
+        vendor = JvmVendorSpec.ADOPTIUM
     }
 }
 
@@ -386,6 +461,21 @@ intellijPlatform {
         ideaVersion {
             sinceBuild = "252"
             untilBuild = "261.*"
+        }
+    }
+
+    pluginVerification {
+        failureLevel = EnumSet.complementOf(
+            EnumSet.of(
+                VerifyPluginTask.FailureLevel.DEPRECATED_API_USAGES,
+                VerifyPluginTask.FailureLevel.EXPERIMENTAL_API_USAGES,
+            ),
+        )
+        ides {
+            create(IntelliJPlatformType.IntellijIdeaCommunity, "2025.2.6.3")
+            create(IntelliJPlatformType.IntellijIdeaUltimate, "2025.2.6.3")
+            create(IntelliJPlatformType.IntellijIdea, "2025.3.6.1")
+            create(IntelliJPlatformType.IntellijIdea, "2026.1.4")
         }
     }
 }
@@ -449,14 +539,60 @@ val writeLocalOdbRuntimeManifest by tasks.registering(WriteRuntimeManifest::clas
 
 val testJdk8 = javaToolchains.launcherFor {
     languageVersion = JavaLanguageVersion.of(8)
+    vendor = JvmVendorSpec.AZUL
 }
 
-tasks.test {
+val configureFeatureTests: org.gradle.api.tasks.testing.Test.() -> Unit = {
     dependsOn(writeProbeRuntimeManifest, probeApplicationJar)
     systemProperty("org.lewisodb.intellij.runtime", probeAdapterJar.flatMap { it.archiveFile }.get().asFile)
     systemProperty("org.lewisodb.intellij.runtimeManifest", probeRuntimeManifest.get().asFile)
     systemProperty("org.lewisodb.intellij.testApplication", probeApplicationJar.flatMap { it.archiveFile }.get().asFile)
     systemProperty("org.lewisodb.intellij.testJdk8", testJdk8.get().metadata.installationPath.asFile)
+}
+
+tasks.test {
+    configureFeatureTests()
+}
+
+intellijPlatformTesting {
+    testIde {
+        register("testIde252Community") {
+            type = IntelliJPlatformType.IntellijIdeaCommunity
+            version = "2025.2.6.3"
+            useInstaller = true
+            plugins { bundledPlugin("com.intellij.java") }
+            testFramework(TestFrameworkType.Platform, "252.28539.97")
+            testFramework(TestFrameworkType.Plugin.Java, "252.28539.97")
+            task { configureFeatureTests() }
+        }
+        register("testIde252Ultimate") {
+            type = IntelliJPlatformType.IntellijIdeaUltimate
+            version = "2025.2.6.3"
+            useInstaller = true
+            plugins { bundledPlugin("com.intellij.java") }
+            testFramework(TestFrameworkType.Platform, "252.28539.97")
+            testFramework(TestFrameworkType.Plugin.Java, "252.28539.97")
+            task { configureFeatureTests() }
+        }
+        register("testIde261") {
+            type = IntelliJPlatformType.IntellijIdea
+            version = "2026.1.4"
+            useInstaller = true
+            plugins {
+                bundledPlugin("com.intellij.java")
+                disablePlugin("org.jetbrains.plugins.vue")
+            }
+            testFramework(TestFrameworkType.Platform, "261.26222.65")
+            testFramework(TestFrameworkType.Plugin.Java, "261.26222.65")
+            task { configureFeatureTests() }
+        }
+    }
+}
+
+tasks.register("testIdeMatrix") {
+    group = "verification"
+    description = "Runs the feature suite on the exact approved IDEA test matrix."
+    dependsOn("testIde252Community", "testIde252Ultimate", "testIde261")
 }
 
 tasks.runIde {
@@ -472,20 +608,111 @@ tasks.runIde {
     }
 }
 
+val suppliedPluginArchivePath = providers.gradleProperty("pluginArchive").orNull
+val buildsPluginArchive = suppliedPluginArchivePath == null
+val pluginArchive = objects.fileProperty().apply {
+    if (suppliedPluginArchivePath == null) {
+        set(tasks.named<Zip>("buildPlugin").flatMap { it.archiveFile })
+    } else {
+        set(file(suppliedPluginArchivePath))
+    }
+}
+
 val verifyProbeIsolation by tasks.registering(VerifyProbeIsolation::class) {
-    dependsOn(tasks.named("buildPlugin"))
-    pluginZip = tasks.named<Zip>("buildPlugin").flatMap { it.archiveFile }
+    if (buildsPluginArchive) dependsOn(tasks.named("buildPlugin"))
+    pluginZip = pluginArchive
 }
 
 val verifyBundledOdb by tasks.registering(VerifyBundledOdb::class) {
-    dependsOn(tasks.named("buildPlugin"))
-    pluginZip = tasks.named<Zip>("buildPlugin").flatMap { it.archiveFile }
+    if (buildsPluginArchive) dependsOn(tasks.named("buildPlugin"))
+    pluginZip = pluginArchive
     sourceArchive = layout.projectDirectory.file(
         "release-inputs/odb/odb-source-40892aaef11f2585fb5a35755656662d8cbc8753.tar.gz",
     )
     releaseChecksums = layout.projectDirectory.file("release-inputs/odb/SHA256SUMS")
     maximumPluginBytes = 5L * 1024L * 1024L
     reportFile = layout.buildDirectory.file("reports/bundledOdb/verification.txt")
+}
+
+tasks.named<VerifyPluginTask>("verifyPlugin") {
+    archiveFile = pluginArchive
+}
+
+tasks.named<SignPluginTask>("signPlugin") {
+    archiveFile = pluginArchive
+    privateKey = providers.environmentVariable("PRIVATE_KEY")
+    password = providers.environmentVariable("PRIVATE_KEY_PASSWORD")
+    certificateChain = providers.environmentVariable("CERTIFICATE_CHAIN")
+}
+
+tasks.named<VerifyPluginSignatureTask>("verifyPluginSignature") {
+    certificateChain = providers.environmentVariable("CERTIFICATE_CHAIN")
+}
+
+val installedPluginContents = layout.buildDirectory.dir("installed-zip-smoke/target")
+val installedPluginJarName = "Lewis ODB-$version.jar"
+val extractInstalledPlugin by tasks.registering(Sync::class) {
+    if (buildsPluginArchive) dependsOn(tasks.named("buildPlugin"))
+    from(pluginArchive.map { zipTree(it) })
+    into(installedPluginContents)
+}
+
+val installedZipSmokeSandbox = layout.buildDirectory.dir("installed-zip-smoke/sandbox")
+val installedZipSmokeOutput = layout.buildDirectory.dir("installed-zip-smoke/inspection-output")
+val installedZipSmokeProject = layout.buildDirectory.dir("installed-zip-smoke/project")
+val installedZipSmokeLog = installedZipSmokeSandbox.map { it.file("log_runIde253InstalledZip/idea.log") }
+val cleanInstalledZipSmoke by tasks.registering(Delete::class) {
+    delete(installedZipSmokeLog, installedZipSmokeOutput)
+}
+val prepareInstalledZipSmokeProject by tasks.registering(Sync::class) {
+    from("src/test/fixtures/installed-zip-project")
+    into(installedZipSmokeProject)
+}
+
+intellijPlatformTesting {
+    runIde {
+        register("runIde253InstalledZip") {
+            type = IntelliJPlatformType.IntellijIdea
+            version = "2025.3.6.1"
+            useInstaller = true
+            sandboxDirectory = installedZipSmokeSandbox
+            plugins { bundledPlugin("com.intellij.java") }
+            prepareSandboxTask {
+                setDependsOn(listOf(extractInstalledPlugin))
+                pluginDirectory = installedPluginContents.map { it.dir("Lewis ODB") }
+                pluginJar = installedPluginContents.map {
+                    it.file("Lewis ODB/lib/$installedPluginJarName")
+                }
+                runtimeClasspath.setFrom(emptyList<Any>())
+            }
+            task {
+                dependsOn(cleanInstalledZipSmoke, prepareInstalledZipSmokeProject)
+                jvmArgs("-Didea.auto.reload.plugins=false", "-Didea.force.exit=true")
+                args(
+                    "inspect",
+                    installedZipSmokeProject.get().asFile.absolutePath,
+                    layout.projectDirectory.file("src/test/fixtures/installed-zip-inspection.xml").asFile.absolutePath,
+                    installedZipSmokeOutput.get().asFile.absolutePath,
+                    "-v2",
+                )
+            }
+        }
+    }
+}
+
+val verifyInstalledZipSmoke by tasks.registering(VerifyInstalledZipSmoke::class) {
+    dependsOn("runIde253InstalledZip")
+    pluginZip = pluginArchive
+    ideaLog = installedZipSmokeLog
+    inspectionOutput = installedZipSmokeOutput
+    expectedIdeBuild = "253.33813.55"
+    reportFile = layout.buildDirectory.file("reports/installedZipSmoke/verification.txt")
+}
+
+tasks.register("verifyExactPlugin") {
+    group = "verification"
+    description = "Verifies the supplied or freshly built plugin ZIP without rebuilding supplied bytes."
+    dependsOn(verifyProbeIsolation, verifyBundledOdb, "verifyPlugin")
 }
 
 tasks.check {

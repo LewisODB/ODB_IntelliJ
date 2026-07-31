@@ -21,14 +21,13 @@ import com.intellij.psi.PsiArrayType
 import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiModifier
 import com.intellij.psi.PsiTypes
-import com.intellij.util.PlatformUtils
 import java.awt.GraphicsEnvironment
 import java.nio.file.Files
 import java.nio.file.InvalidPathException
 import java.nio.file.Path
 
 internal class OdbPreflight(
-    private val isIntelliJ: Boolean = PlatformUtils.isIntelliJ(),
+    private val isIntelliJ: Boolean = ApplicationInfo.getInstance().versionName == "IntelliJ IDEA",
     private val productName: String = ApplicationInfo.getInstance().versionName,
     private val desktopAvailable: () -> Boolean = ::hasDesktopGraphics,
 ) {

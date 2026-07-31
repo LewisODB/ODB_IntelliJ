@@ -1,0 +1,162 @@
+name: Sign release candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      ci-run-id:
+        description: Trusted CI workflow run ID
+        required: true
+        type: string
+      unsigned-artifact-id:
+        description: Immutable unsigned artifact ID
+        required: true
+        type: string
+      unsigned-sha256:
+        description: Expected unsigned plugin ZIP SHA-256
+        required: true
+        type: string
+      tested-commit:
+        description: Commit that produced the unsigned ZIP
+        required: true
+        type: string
+      release-version:
+        description: Release version without v prefix
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+
+env:
+  BUILD_JAVA_VERSION: 21.0.11+10
+
+jobs:
+  sign-once:
+    name: Sign exact unsigned ZIP once
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    environment: release
+    steps:
+      - name: Validate source workflow and commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_COMMIT: ${{ inputs.tested-commit }}
+          SOURCE_RUN_ID: ${{ inputs.ci-run-id }}
+        run: |
+          set -euo pipefail
+          IFS=$'\t' read -r run_commit run_conclusion run_path run_repository run_event run_branch < <(
+            gh api "repos/${{ github.repository }}/actions/runs/$SOURCE_RUN_ID" \
+              --jq '[.head_sha, .conclusion, .path, .head_repository.full_name, .event, .head_branch] | @tsv'
+          )
+          test "$run_commit" = "$EXPECTED_COMMIT"
+          test "$run_conclusion" = "success"
+          test "$run_path" = ".github/workflows/ci.yml"
+          test "$run_repository" = "${{ github.repository }}"
+          [[ "$run_event" == "push" || "$run_event" == "workflow_dispatch" ]]
+          test "$run_branch" = "main"
+
+      - name: Fetch tested sources
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ inputs.tested-commit }}
+
+      - name: Install build JDK 21
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+        with:
+          distribution: temurin
+          java-version: ${{ env.BUILD_JAVA_VERSION }}
+
+      - name: Configure Gradle read-only cache
+        uses: gradle/actions/setup-gradle@3f131e8634966bd73d06cc69884922b02e6faf92 # v6.2.0
+        with:
+          cache-provider: basic
+          cache-read-only: true
+
+      - name: Download exact unsigned ZIP
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.ci-run-id }}
+          artifact-ids: ${{ inputs.unsigned-artifact-id }}
+          path: candidate
+          digest-mismatch: error
+
+      - name: Validate version, checksum, and no-rebuild wiring
+        id: unsigned
+        shell: bash
+        env:
+          EXPECTED_SHA256: ${{ inputs.unsigned-sha256 }}
+          RELEASE_VERSION: ${{ inputs.release-version }}
+        run: |
+          set -euo pipefail
+          archive="$(find candidate -type f -name '*.zip' -print -quit)"
+          test -n "$archive"
+          test "$(sha256sum "$archive" | awk '{print $1}')" = "$EXPECTED_SHA256"
+          test "$(sed -n 's/^pluginVersion = //p' gradle.properties)" = "$RELEASE_VERSION"
+          grep -Fq "## [$RELEASE_VERSION]" CHANGELOG.md
+          bash scripts/assert-no-plugin-rebuild.sh signPlugin "$archive"
+          echo "path=$archive" >> "$GITHUB_OUTPUT"
+
+      - name: Sign once and verify signature
+        env:
+          CERTIFICATE_CHAIN: ${{ secrets.CERTIFICATE_CHAIN }}
+          PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
+          PRIVATE_KEY_PASSWORD: ${{ secrets.PRIVATE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          mkdir -p build/reports
+          ./gradlew --no-daemon signPlugin verifyPluginSignature \
+            -PpluginArchive=${{ steps.unsigned.outputs.path }} \
+            | tee build/reports/signature-verification.txt
+
+      - name: Identify signed ZIP
+        id: signed
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="$(find build -type f -name '*-signed.zip' -print -quit)"
+          test -n "$archive"
+          sha256="$(sha256sum "$archive" | awk '{print $1}')"
+          echo "artifact-name=lewis-odb-signed-$sha256" >> "$GITHUB_OUTPUT"
+          echo "path=$archive" >> "$GITHUB_OUTPUT"
+          echo "sha256=$sha256" >> "$GITHUB_OUTPUT"
+
+      - name: Reinspect and reverify signed ZIP
+        run: |
+          set -euo pipefail
+          bash scripts/assert-no-plugin-rebuild.sh verifyExactPlugin "${{ steps.signed.outputs.path }}"
+          ./gradlew --no-daemon verifyExactPlugin \
+            -PpluginArchive=${{ steps.signed.outputs.path }}
+
+      - name: Assemble public release evidence
+        env:
+          CERTIFICATE_CHAIN: ${{ secrets.CERTIFICATE_CHAIN }}
+        run: |
+          set -euo pipefail
+          mkdir -p build/release-evidence
+          printf '%s\n' "$CERTIFICATE_CHAIN" > build/release-evidence/certificate-chain.pem
+          openssl x509 -in build/release-evidence/certificate-chain.pem -noout -fingerprint -sha256 > build/release-evidence/certificate-fingerprint.txt
+          sha256sum "${{ steps.unsigned.outputs.path }}" "${{ steps.signed.outputs.path }}" > build/release-evidence/plugin-SHA256SUMS
+          unzip -l "${{ steps.signed.outputs.path }}" > build/release-evidence/signed-plugin-inventory.txt
+          cp -R build/reports/bundledOdb build/release-evidence/bundled-odb
+          cp -R build/reports/pluginVerifier build/release-evidence/plugin-verifier
+          cp build/reports/signature-verification.txt build/release-evidence/signature-verification.txt
+
+      - name: Upload exact signed ZIP
+        id: upload-signed
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ steps.signed.outputs.artifact-name }}
+          path: ${{ steps.signed.outputs.path }}
+          archive: false
+          if-no-files-found: error
+          overwrite: false
+
+      - name: Upload signing evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: signing-evidence-${{ steps.signed.outputs.sha256 }}
+          path: build/release-evidence
+          if-no-files-found: error
+          overwrite: false

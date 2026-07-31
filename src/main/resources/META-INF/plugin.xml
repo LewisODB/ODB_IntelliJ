@@ -1,5 +1,5 @@
 <idea-plugin url="https://github.com/LewisODB/ODB_IntelliJ">
-    <id>org.lewisodb.intellij</id>
+    <id>org.lewisodb</id>
     <name>Lewis ODB</name>
     <vendor url="https://github.com/LewisODB/ODB_IntelliJ">Lewis ODB</vendor>
     <version>0.1.0-SNAPSHOT</version>
