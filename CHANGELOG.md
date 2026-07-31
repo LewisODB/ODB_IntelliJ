@@ -7,3 +7,4 @@
 - Permanent plugin identity and build baseline.
 - `Run with ODB` for local Java Application configurations on target JDK 8.
 - Automatic ODB source lookup from the selected IntelliJ module's source roots.
+- Self-contained, checksummed ODB runtime, corresponding source, SBOM, and license inventory.
