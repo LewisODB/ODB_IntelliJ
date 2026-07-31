@@ -15,8 +15,16 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 @Service(Service.Level.PROJECT)
 class OdbSessionOwner(
-    private val childIdentityFactory: (ProcessHandler) -> OdbProcessIdentity? = { handler ->
-        (handler as? BaseProcessHandler<*>)?.process?.toHandle()?.let(JvmOdbProcessInspector::identify)
+    private val childObservationFactory: (ProcessHandler) -> OdbProcessObservation = { handler ->
+        (handler as? BaseProcessHandler<*>)?.process?.let { process ->
+            when {
+                !process.isAlive -> OdbProcessObservation.Missing
+                else -> process.toHandle()
+                    .let(JvmOdbProcessInspector::identify)
+                    ?.let(OdbProcessObservation::Running)
+                    ?: OdbProcessObservation.Unknown
+            }
+        } ?: OdbProcessObservation.Unknown
     },
 ) : Disposable {
     private val sessions = ConcurrentHashMap<ProcessHandler, OdbSessionState>()
@@ -51,11 +59,14 @@ class OdbSessionOwner(
         })
         if (session.recordsProcessIdentity) {
             try {
-                val childIdentity = childIdentityFactory(handler)
-                if (childIdentity != null) {
-                    session.recordChild(childIdentity)
-                } else if (!handler.isProcessTerminated && !handler.isProcessTerminating) {
-                    throw IllegalStateException("Could not identify the ODB child process.")
+                when (val child = childObservationFactory(handler)) {
+                    is OdbProcessObservation.Running -> session.recordChild(child.identity)
+                    OdbProcessObservation.Missing -> Unit
+                    OdbProcessObservation.Unknown -> {
+                        if (!handler.isProcessTerminated && !handler.isProcessTerminating) {
+                            throw IllegalStateException("Could not identify the ODB child process.")
+                        }
+                    }
                 }
             } catch (error: Exception) {
                 requestStop(handler)

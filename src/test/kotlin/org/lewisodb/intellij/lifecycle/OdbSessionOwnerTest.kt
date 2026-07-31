@@ -86,9 +86,28 @@ class OdbSessionOwnerTest {
             it.startNotify()
             it.destroyProcess()
         }
-        val owner = OdbSessionOwner { null }
+        val owner = OdbSessionOwner { OdbProcessObservation.Missing }
 
         owner.supervise(handler, session, OdbSessionReporter(TOKEN, {}, {}))
+
+        assertFalse(Files.exists(session.directory))
+    }
+
+    @Test
+    fun `missing child before process notifications does not mask its exit`() {
+        val root = Files.createTempDirectory("odb-owner-pending-exit-root").toRealPath()
+        val session = OdbSessionState.createManaged(
+            root,
+            OdbProcessIdentity(101, java.time.Instant.parse("2026-07-20T12:00:00Z")),
+        )
+        val handler = NopProcessHandler()
+        val owner = OdbSessionOwner { OdbProcessObservation.Missing }
+
+        owner.supervise(handler, session, OdbSessionReporter(TOKEN, {}, {}))
+        assertTrue(Files.exists(session.directory))
+
+        handler.startNotify()
+        handler.destroyProcess()
 
         assertFalse(Files.exists(session.directory))
     }
