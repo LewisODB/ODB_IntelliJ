@@ -5,4 +5,5 @@
 ## [Unreleased]
 ### Added
 - Permanent plugin identity and build baseline.
-- Planned `Run with ODB` support for local Java Application configurations on target JDK 8.
+- `Run with ODB` for local Java Application configurations on target JDK 8.
+- Automatic ODB source lookup from the selected IntelliJ module's source roots.

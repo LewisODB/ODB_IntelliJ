@@ -19,7 +19,12 @@ import com.intellij.openapi.projectRoots.JavaSdkType
 import com.intellij.openapi.projectRoots.ProjectJdkTable
 import com.intellij.openapi.projectRoots.Sdk
 import com.intellij.openapi.roots.ModuleRootModificationUtil
+import com.intellij.openapi.util.Disposer
+import com.intellij.openapi.vfs.LocalFileSystem
+import com.intellij.psi.JavaPsiFacade
+import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.testFramework.LightVirtualFile
+import com.intellij.testFramework.PsiTestUtil
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -339,6 +344,58 @@ class OdbPreflightTest : BasePlatformTestCase() {
         assertFalse(Files.exists(directory))
     }
 
+    fun testRunnerSeedsSelectedMainSourceRootBeforeProcessCreation() {
+        val sourceRoot = Files.createTempDirectory("odb source root ").toRealPath()
+        val secondaryRoot = Files.createTempDirectory("odb secondary source root ").toRealPath()
+        Disposer.register(testRootDisposable) { OdbSessionState.deleteTree(sourceRoot) }
+        Disposer.register(testRootDisposable) { OdbSessionState.deleteTree(secondaryRoot) }
+        val sourceFile = sourceRoot.resolve("sourcefixture/Main.java")
+        Files.createDirectories(sourceFile.parent)
+        Files.writeString(
+            sourceFile,
+            "package sourcefixture; public class Main { public static void main(String[] args) {} }",
+        )
+        val virtualRoot = requireNotNull(LocalFileSystem.getInstance().refreshAndFindFileByNioFile(sourceRoot))
+        PsiTestUtil.addContentRoot(module, virtualRoot)
+        PsiTestUtil.addSourceRoot(module, virtualRoot)
+        val secondaryVirtualRoot = requireNotNull(
+            LocalFileSystem.getInstance().refreshAndFindFileByNioFile(secondaryRoot),
+        )
+        PsiTestUtil.addContentRoot(module, secondaryVirtualRoot)
+        PsiTestUtil.addSourceRoot(module, secondaryVirtualRoot)
+        assertTrue(
+            JavaPsiFacade.getInstance(project)
+                .findClass("sourcefixture.Main", GlobalSearchScope.moduleScope(module)) != null,
+        )
+        val profile = ApplicationConfiguration("fixture", project).apply {
+            setModule(module)
+            mainClassName = "sourcefixture.Main"
+        }
+        val parameters = supportedParameters().apply { mainClass = "sourcefixture.Main" }
+        val environment = environment(profile)
+        val state = SourceRootRecordingJavaState(
+            environment,
+            parameters,
+            listOf(sourceRoot.toString(), secondaryRoot.toString()),
+        )
+        val root = Files.createTempDirectory("odb-source-root-state").toRealPath()
+        val directory = Files.createTempDirectory(root, "session-").toRealPath()
+        val runtime = Files.write(directory.resolve("odb-runtime.jar"), byteArrayOf(1))
+        val prepared = OdbPreparedRuntime(
+            OdbSessionState.create(root, directory),
+            runtime,
+            "0123456789abcdef0123456789abcdef",
+        )
+        val runner = PreparedTestableRunner(supportedPreflight()) { prepared }
+
+        assertThrows(SourceRootsObserved::class.java) {
+            runner.executeState(state, environment)
+        }
+
+        assertTrue(state.observed)
+        assertFalse(Files.exists(directory))
+    }
+
     private fun rejection(launch: Launch, desktopAvailable: Boolean = true): String =
         rejection(launch.profile, launch.state, desktopAvailable)
 
@@ -447,6 +504,26 @@ class OdbPreflightTest : BasePlatformTestCase() {
             throw AssertionError("Rejected launch reached state.execute()")
         }
     }
+
+    private class SourceRootRecordingJavaState(
+        environment: ExecutionEnvironment,
+        parameters: JavaParameters,
+        private val expectedRoots: List<String>,
+    ) : StaticJavaState(environment, parameters) {
+        var observed = false
+
+        override fun execute(executor: Executor, runner: ProgramRunner<*>): ExecutionResult {
+            val stateDirectory = Path.of(
+                requireNotNull(parameters.vmParametersList.getPropertyValue(OdbLaunchPlan.STATE_DIRECTORY_PROPERTY)),
+            )
+            val roots = Files.readAllLines(stateDirectory.resolve(OdbSourceRoots.FILE_NAME))
+            assertEquals(expectedRoots, roots)
+            observed = true
+            throw SourceRootsObserved()
+        }
+    }
+
+    private class SourceRootsObserved : AssertionError()
 
     private class TestableRunner(preflight: OdbPreflight) : OdbProgramRunner(preflight) {
         fun executeState(state: RunProfileState, environment: ExecutionEnvironment): RunContentDescriptor? =

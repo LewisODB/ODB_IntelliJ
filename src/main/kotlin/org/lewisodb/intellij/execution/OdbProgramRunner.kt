@@ -21,6 +21,7 @@ import org.lewisodb.intellij.lifecycle.OdbSessionOwner
 import org.lewisodb.intellij.lifecycle.OdbSessionPaths
 import org.lewisodb.intellij.launch.OdbLaunchPlan
 import org.lewisodb.intellij.launch.OdbPreflight
+import org.lewisodb.intellij.launch.OdbSourceRoots
 import org.lewisodb.intellij.protocol.OdbSessionReporter
 import org.lewisodb.intellij.runtime.ClasspathOdbRuntimeBundle
 import org.lewisodb.intellij.runtime.FileOdbRuntimeBundle
@@ -53,6 +54,7 @@ open class OdbProgramRunner internal constructor(
         }
         environment.putUserData(PREPARED_RUNTIME_KEY, runtime)
         return try {
+            OdbSourceRoots.write(environment.runProfile as ApplicationConfiguration, runtime.sessionDirectory)
             OdbLaunchPlan(runtime.runtimeJar, runtime.sessionDirectory, runtime.token).applyTo(parameters)
             super.doExecute(javaState, environment)
         } catch (error: Throwable) {

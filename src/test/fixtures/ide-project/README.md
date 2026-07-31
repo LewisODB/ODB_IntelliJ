@@ -7,7 +7,7 @@
 1. If IntelliJ reports no project SDK, open **File | Project Structure | Project** and select an installed JDK 8. On this development machine it is `~/.sdkman/candidates/java/8.0.492-zulu`.
 2. Select **ODB Reverse Linked List Demo** in the run-configuration widget.
 3. Open the executor menu beside the run widget and choose **Run with ODB**.
-4. Until automatic source-root loading is implemented, select [`ReverseLinkedListDemo.java`](../java8/application/org/lewisodb/demo/ReverseLinkedListDemo.java) when ODB asks for the source file.
+4. Confirm ODB displays [`ReverseLinkedListDemo.java`](../java8/application/org/lewisodb/demo/ReverseLinkedListDemo.java) without opening the **Source File** chooser.
 5. Confirm the Run console contains:
 
    ```text
