@@ -15,14 +15,15 @@ if [[ ! -f "$plugin_archive" ]]; then
 fi
 
 plugin_archive="$(cd "$(dirname "$plugin_archive")" && pwd)/$(basename "$plugin_archive")"
-if ! dry_run="$(./gradlew --no-daemon "$task_name" --dry-run "-PpluginArchive=$plugin_archive" 2>&1)"; then
-  printf '%s\n' "$dry_run" >&2
+dry_run_file="$(mktemp)"
+trap 'rm -f "$dry_run_file"' EXIT
+
+if ! ./gradlew --no-daemon "$task_name" --dry-run "-PpluginArchive=$plugin_archive" 2>&1 | tee "$dry_run_file"; then
   echo "$task_name dry run failed for $plugin_archive" >&2
   exit 1
 fi
-printf '%s\n' "$dry_run"
 
-if grep -Eq '(^|[[:space:]]):?(buildPlugin|composedJar|instrumentedJar|jar)([[:space:]]|$)' <<<"$dry_run"; then
+if grep -Eq '(^|[[:space:]]):?(buildPlugin|composedJar|instrumentedJar|jar)([[:space:]]|$)' "$dry_run_file"; then
   echo "$task_name would rebuild plugin bytes instead of consuming $plugin_archive" >&2
   exit 1
 fi
