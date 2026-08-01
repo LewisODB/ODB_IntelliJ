@@ -133,11 +133,12 @@ jobs:
       - name: Identify signed ZIP
         id: signed
         shell: bash
+        env:
+          UNSIGNED_ARCHIVE: ${{ steps.unsigned.outputs.path }}
         run: |
           set -euo pipefail
-          mapfile -t archives < <(find build -type f -name '*-signed.zip' -print)
-          test "${#archives[@]}" -eq 1
-          archive="${archives[0]}"
+          archive="${UNSIGNED_ARCHIVE%.zip}-signed.zip"
+          test -f "$archive"
           sha256="$(sha256sum "$archive" | awk '{print $1}')"
           echo "artifact-name=lewis-odb-signed-$sha256" >> "$GITHUB_OUTPUT"
           echo "path=$archive" >> "$GITHUB_OUTPUT"
