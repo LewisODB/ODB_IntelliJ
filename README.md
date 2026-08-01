@@ -1,45 +1,35 @@
-# ODB_IntelliJ
+# Lewis ODB
 
-![Build](https://github.com/LewisODB/ODB_IntelliJ/workflows/Build/badge.svg)
-[![Version](https://img.shields.io/jetbrains/plugin/v/MARKETPLACE_ID.svg)](https://plugins.jetbrains.com/plugin/MARKETPLACE_ID)
-[![Downloads](https://img.shields.io/jetbrains/plugin/d/MARKETPLACE_ID.svg)](https://plugins.jetbrains.com/plugin/MARKETPLACE_ID)
+An IntelliJ Platform plugin for running an existing Java Application configuration with [Lewis Omniscient Debugger](https://github.com/LewisODB/OmniscientDebugger).
 
-## Template ToDo list
-- [x] Create a new [IntelliJ Platform Plugin Template][template] project.
-- [ ] Get familiar with the [template documentation][template].
-- [ ] Adjust the [group](./gradle.properties), as well as the [id](./src/main/resources/META-INF/plugin.xml), [name](./src/main/resources/META-INF/plugin.xml), and [sources package](./src/main/kotlin).
-- [ ] Adjust the plugin [description](./src/main/resources/META-INF/plugin.xml) (see [Tips][docs:plugin-description]) and this README to describe what your plugin does.
-- [ ] Review the [Legal Agreements](https://plugins.jetbrains.com/docs/marketplace/legal-agreements.html?from=IJPluginTemplate).
-- [ ] [Publish a plugin manually](https://plugins.jetbrains.com/docs/intellij/publishing-plugin.html?from=IJPluginTemplate) for the first time.
-- [ ] Set the `MARKETPLACE_ID` in the above README badges. You can obtain it once the plugin is published to JetBrains Marketplace.
-- [ ] Set the [Plugin Signing](https://plugins.jetbrains.com/docs/intellij/plugin-signing.html?from=IJPluginTemplate) related [secrets](https://github.com/JetBrains/intellij-platform-plugin-template#environment-variables).
-- [ ] Set the [Deployment Token](https://plugins.jetbrains.com/docs/marketplace/plugin-upload.html?from=IJPluginTemplate).
-- [ ] Click the <kbd>Watch</kbd> button on the top of the [IntelliJ Platform Plugin Template][template] to be notified about releases containing new features and fixes.
+The plugin adds **Run with ODB**. IntelliJ keeps its normal console and process controls. ODB opens in a separate Swing window. The plugin does not modify the project or saved run configuration.
 
-This Fancy IntelliJ Platform Plugin is going to be your implementation of the brilliant ideas that you have.
+## Status
+
+Under development. **Run with ODB** works in the local development sandbox, including automatic source lookup. The self-contained plugin ZIP now carries the audited ODB runtime and legal material; compatibility-matrix and cross-platform qualification remain incomplete.
+
+Version 1 supports IntelliJ IDEA builds 252 through 261.* on macOS, Windows, and Linux. Target applications must use a local JDK 8 and the classpath.
+
+Version 1 excludes test, Gradle task, Maven task, remote, compound, and Android run configurations. It also excludes WSL, containers, JPMS module-path applications, and target JDK 9 or newer.
 
 ## Installation
 
-- Using the IDE built-in plugin system:
+Download the plugin ZIP from [GitHub Releases](https://github.com/LewisODB/ODB_IntelliJ/releases). In IntelliJ IDEA, choose **Settings > Plugins > Install Plugin from Disk**, then select the ZIP. Marketplace installation is not available for version 1.
 
-  <kbd>Settings/Preferences</kbd> > <kbd>Plugins</kbd> > <kbd>Marketplace</kbd> > <kbd>Search for "ODB_IntelliJ"</kbd> >
-  <kbd>Install</kbd>
+## Development
 
-- Using JetBrains Marketplace:
+Use JDK 21 to run Gradle.
 
-  Go to [JetBrains Marketplace](https://plugins.jetbrains.com/plugin/MARKETPLACE_ID) and install it by clicking the <kbd>Install to ...</kbd> button in case your IDE is running.
+Build the plugin distribution:
 
-  You can also download the [latest release](https://plugins.jetbrains.com/plugin/MARKETPLACE_ID/versions) from JetBrains Marketplace and install it manually using
-  <kbd>Settings/Preferences</kbd> > <kbd>Plugins</kbd> > <kbd>⚙️</kbd> > <kbd>Install plugin from disk...</kbd>
+```shell
+./gradlew buildPlugin
+```
 
-- Manually:
+Run it in a development instance of IntelliJ IDEA:
 
-  Download the [latest release](https://github.com/LewisODB/ODB_IntelliJ/releases/latest) and install it manually using
-  <kbd>Settings/Preferences</kbd> > <kbd>Plugins</kbd> > <kbd>⚙️</kbd> > <kbd>Install plugin from disk...</kbd>
+```shell
+./gradlew runIde
+```
 
-
----
-Plugin based on the [IntelliJ Platform Plugin Template][template].
-
-[template]: https://github.com/JetBrains/intellij-platform-plugin-template
-[docs:plugin-description]: https://plugins.jetbrains.com/docs/intellij/plugin-user-experience.html#plugin-description-and-presentation
+The generated plugin ZIP is written under `build/distributions/`.
