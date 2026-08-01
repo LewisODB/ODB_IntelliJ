@@ -25,6 +25,7 @@ import com.intellij.openapi.extensions.ExtensionPointName
 import com.intellij.openapi.util.JDOMUtil
 import com.intellij.openapi.roots.ModuleRootModificationUtil
 import com.intellij.openapi.startup.ProjectActivity
+import com.intellij.openapi.vfs.newvfs.impl.VfsRootAccess
 import com.intellij.testFramework.PsiTestUtil
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
 import org.jdom.Element
@@ -44,6 +45,11 @@ import java.nio.file.Path
 import java.nio.file.Files
 
 class OdbExecutionTest : BasePlatformTestCase() {
+    override fun setUp() {
+        super.setUp()
+        VfsRootAccess.allowRootAccess(testRootDisposable, System.getProperty("org.lewisodb.intellij.testJdk8"))
+    }
+
     fun testExecutorAndRunnerLoadFromPluginDescriptor() {
         val executor = requireNotNull(ExecutorRegistry.getInstance().getExecutorById(OdbExecutor.ID))
         assertTrue(executor is OdbExecutor)

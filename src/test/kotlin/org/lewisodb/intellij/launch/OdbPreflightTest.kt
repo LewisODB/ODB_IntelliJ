@@ -21,6 +21,7 @@ import com.intellij.openapi.projectRoots.Sdk
 import com.intellij.openapi.roots.ModuleRootModificationUtil
 import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.vfs.LocalFileSystem
+import com.intellij.openapi.vfs.newvfs.impl.VfsRootAccess
 import com.intellij.psi.JavaPsiFacade
 import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.testFramework.LightVirtualFile
@@ -43,6 +44,7 @@ class OdbPreflightTest : BasePlatformTestCase() {
 
     override fun setUp() {
         super.setUp()
+        VfsRootAccess.allowRootAccess(testRootDisposable, System.getProperty("org.lewisodb.intellij.testJdk8"))
         jdk8 = JavaSdk.getInstance().createJdk(
             "odb-preflight-jdk8",
             System.getProperty("org.lewisodb.intellij.testJdk8"),
