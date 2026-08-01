@@ -108,7 +108,7 @@ jobs:
           set -euo pipefail
           mkdir -p build/reports
           ./gradlew --no-daemon signPlugin verifyPluginSignature \
-            -PpluginArchive=${{ steps.unsigned.outputs.path }} \
+            "-PpluginArchive=${{ steps.unsigned.outputs.path }}" \
             | tee build/reports/signature-verification.txt
 
       - name: Identify signed ZIP
@@ -128,7 +128,7 @@ jobs:
           set -euo pipefail
           bash scripts/assert-no-plugin-rebuild.sh verifyExactPlugin "${{ steps.signed.outputs.path }}"
           ./gradlew --no-daemon verifyExactPlugin \
-            -PpluginArchive=${{ steps.signed.outputs.path }}
+            "-PpluginArchive=${{ steps.signed.outputs.path }}"
 
       - name: Assemble public release evidence
         env:

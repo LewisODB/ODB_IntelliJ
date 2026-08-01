@@ -166,7 +166,7 @@ jobs:
       - name: Inspect and run Plugin Verifier on exact ZIP
         run: >-
           ./gradlew --no-daemon verifyExactPlugin
-          -PpluginArchive=${{ steps.candidate.outputs.path }}
+          "-PpluginArchive=${{ steps.candidate.outputs.path }}"
 
       - name: Retain exact-ZIP reports
         if: always()
@@ -221,7 +221,7 @@ jobs:
       - name: Open and close exact ZIP without ODB Swing
         run: >-
           xvfb-run -a ./gradlew --no-daemon verifyInstalledZipSmoke
-          -PpluginArchive=${{ steps.candidate.outputs.path }}
+          "-PpluginArchive=${{ steps.candidate.outputs.path }}"
 
       - name: Retain installed-ZIP report
         if: always()
