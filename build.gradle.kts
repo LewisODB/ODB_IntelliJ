@@ -29,6 +29,14 @@ import java.util.EnumSet
 import java.util.zip.ZipInputStream
 import org.gradle.api.tasks.bundling.Zip
 
+abstract class TestJdk8ArgumentProvider : CommandLineArgumentProvider {
+    @get:Input
+    abstract val javaHome: Property<String>
+
+    override fun asArguments(): Iterable<String> =
+        listOf("-Dorg.lewisodb.intellij.testJdk8=${javaHome.get()}")
+}
+
 abstract class VerifyInstalledZipSmoke : DefaultTask() {
     @get:InputFile
     @get:PathSensitive(PathSensitivity.NONE)
@@ -541,13 +549,16 @@ val testJdk8 = javaToolchains.launcherFor {
     languageVersion = JavaLanguageVersion.of(8)
     vendor = JvmVendorSpec.AZUL
 }
+val testJdk8Home = testJdk8.map { it.metadata.installationPath.asFile.absolutePath }
 
 val configureFeatureTests: org.gradle.api.tasks.testing.Test.() -> Unit = {
     dependsOn(writeProbeRuntimeManifest, probeApplicationJar)
     systemProperty("org.lewisodb.intellij.runtime", probeAdapterJar.flatMap { it.archiveFile }.get().asFile)
     systemProperty("org.lewisodb.intellij.runtimeManifest", probeRuntimeManifest.get().asFile)
     systemProperty("org.lewisodb.intellij.testApplication", probeApplicationJar.flatMap { it.archiveFile }.get().asFile)
-    systemProperty("org.lewisodb.intellij.testJdk8", testJdk8.get().metadata.installationPath.asFile)
+    jvmArgumentProviders.add(objects.newInstance(TestJdk8ArgumentProvider::class.java).apply {
+        javaHome.set(testJdk8Home)
+    })
 }
 
 tasks.test {
