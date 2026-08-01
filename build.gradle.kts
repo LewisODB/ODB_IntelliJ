@@ -658,15 +658,24 @@ tasks.named<VerifyPluginTask>("verifyPlugin") {
     archiveFile = pluginArchive
 }
 
-tasks.named<SignPluginTask>("signPlugin") {
+val signatureCertificateChainFilePath = providers.gradleProperty("signatureCertificateChainFile").orNull
+val signPluginTask = tasks.named<SignPluginTask>("signPlugin") {
     archiveFile = pluginArchive
     privateKey = providers.environmentVariable("PRIVATE_KEY")
     password = providers.environmentVariable("PRIVATE_KEY_PASSWORD")
-    certificateChain = providers.environmentVariable("CERTIFICATE_CHAIN")
+    if (signatureCertificateChainFilePath == null) {
+        certificateChain = providers.environmentVariable("CERTIFICATE_CHAIN")
+    } else {
+        certificateChainFile = file(signatureCertificateChainFilePath)
+    }
 }
 
 tasks.named<VerifyPluginSignatureTask>("verifyPluginSignature") {
-    certificateChain = providers.environmentVariable("CERTIFICATE_CHAIN")
+    dependsOn(signPluginTask)
+    inputArchiveFile = signPluginTask.flatMap { it.signedArchiveFile }
+    if (signatureCertificateChainFilePath != null) {
+        certificateChainFile = file(signatureCertificateChainFilePath)
+    }
 }
 
 val installedPluginContents = layout.buildDirectory.dir("installed-zip-smoke/target")

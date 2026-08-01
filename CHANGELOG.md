@@ -3,6 +3,9 @@
 # Lewis ODB changelog
 
 ## [Unreleased]
+
+## [1.0.0] - 2026-08-01
+
 ### Added
 - Permanent plugin identity and build baseline.
 - `Run with ODB` for local Java Application configurations on target JDK 8.
