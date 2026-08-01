@@ -149,6 +149,7 @@ jobs:
         with:
           artifact-ids: ${{ needs.package-unsigned.outputs.artifact-id }}
           path: candidate
+          skip-decompress: true
           digest-mismatch: error
 
       - name: Verify ZIP checksum and no-rebuild wiring
@@ -203,6 +204,7 @@ jobs:
         with:
           artifact-ids: ${{ needs.package-unsigned.outputs.artifact-id }}
           path: candidate
+          skip-decompress: true
           digest-mismatch: error
 
       - name: Verify ZIP checksum and no-rebuild wiring

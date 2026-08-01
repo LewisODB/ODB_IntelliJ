@@ -80,6 +80,7 @@ jobs:
           run-id: ${{ inputs.ci-run-id }}
           artifact-ids: ${{ inputs.unsigned-artifact-id }}
           path: candidate
+          skip-decompress: true
           digest-mismatch: error
 
       - name: Validate version, checksum, and no-rebuild wiring
