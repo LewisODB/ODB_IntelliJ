@@ -480,10 +480,19 @@ intellijPlatform {
             ),
         )
         ides {
-            create(IntelliJPlatformType.IntellijIdeaCommunity, "2025.2.6.3")
-            create(IntelliJPlatformType.IntellijIdeaUltimate, "2025.2.6.3")
-            create(IntelliJPlatformType.IntellijIdea, "2025.3.6.1")
-            create(IntelliJPlatformType.IntellijIdea, "2026.1.4")
+            when (val selectedIde = providers.gradleProperty("pluginVerifierIde").orNull) {
+                null -> {
+                    create(IntelliJPlatformType.IntellijIdeaCommunity, "2025.2.6.3")
+                    create(IntelliJPlatformType.IntellijIdeaUltimate, "2025.2.6.3")
+                    create(IntelliJPlatformType.IntellijIdea, "2025.3.6.1")
+                    create(IntelliJPlatformType.IntellijIdea, "2026.1.4")
+                }
+                "252-community" -> create(IntelliJPlatformType.IntellijIdeaCommunity, "2025.2.6.3")
+                "252-ultimate" -> create(IntelliJPlatformType.IntellijIdeaUltimate, "2025.2.6.3")
+                "253" -> create(IntelliJPlatformType.IntellijIdea, "2025.3.6.1")
+                "261" -> create(IntelliJPlatformType.IntellijIdea, "2026.1.4")
+                else -> throw GradleException("Unsupported pluginVerifierIde: $selectedIde")
+            }
         }
     }
 }
