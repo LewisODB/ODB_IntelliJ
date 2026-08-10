@@ -8,7 +8,7 @@ The plugin adds **Run with ODB**. IntelliJ keeps its normal console and process 
 
 Under development. **Run with ODB** works in the local development sandbox, including automatic source lookup. The self-contained plugin ZIP carries the audited ODB runtime and passes the supported IntelliJ compatibility matrix; cross-platform qualification remains incomplete.
 
-Version 1 supports IntelliJ IDEA builds 252 through 261.* on macOS, Windows, and Linux. Target applications must use a local JDK 8 and the classpath.
+Version 1 supports IntelliJ IDEA build 252 and later on macOS, Windows, and Linux. Target applications must use a local JDK 8 and the classpath.
 
 Version 1 excludes test, Gradle task, Maven task, remote, compound, and Android run configurations. It also excludes WSL, containers, JPMS module-path applications, and target JDK 9 or newer.
 

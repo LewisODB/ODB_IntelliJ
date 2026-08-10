@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### Changed
+- Removed the maximum IntelliJ IDEA build restriction. Build 252 remains the minimum.
+
 ## [1.0.0] - 2026-08-01
 
 ### Added

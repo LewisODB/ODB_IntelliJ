@@ -3,7 +3,7 @@
     <name>Lewis ODB</name>
     <vendor url="https://github.com/LewisODB/ODB_IntelliJ">Lewis ODB</vendor>
     <version>0.1.0-SNAPSHOT</version>
-    <idea-version since-build="252" until-build="261.*"/>
+    <idea-version since-build="252"/>
     <change-notes>https://github.com/LewisODB/ODB_IntelliJ/blob/main/CHANGELOG.md</change-notes>
     <description><![CDATA[
         <p>Run the selected local Java Application configuration with the bundled Lewis Omniscient Debugger.</p>
