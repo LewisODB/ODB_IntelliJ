@@ -29,7 +29,7 @@ permissions:
   contents: read
 
 env:
-  BUILD_JAVA_VERSION: 21.0.11+10
+  BUILD_JAVA_VERSION: '21'
 
 jobs:
   sign-once:

@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  BUILD_JAVA_VERSION: 21.0.11+10
+  BUILD_JAVA_VERSION: '21'
   TARGET_JAVA_VERSION: 8.0.492+9
 
 jobs:
