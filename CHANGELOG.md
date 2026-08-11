@@ -2,11 +2,6 @@
 
 # Lewis ODB changelog
 
-## [Unreleased]
-
-### Changed
-- Removed the maximum IntelliJ IDEA build restriction. Build 252 remains the minimum.
-
 ## [1.0.0] - 2026-08-01
 
 ### Added
@@ -14,3 +9,6 @@
 - `Run with ODB` for local Java Application configurations on target JDK 8.
 - Automatic ODB source lookup from the selected IntelliJ module's source roots.
 - Self-contained, checksummed ODB runtime, corresponding source, SBOM, and license inventory.
+
+### Changed
+- Removed the maximum IntelliJ IDEA build restriction. Build 252 remains the minimum.
