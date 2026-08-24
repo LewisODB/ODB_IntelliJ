@@ -112,7 +112,7 @@ abstract class WriteRuntimeManifest : DefaultTask() {
         val sourceCommit = "0".repeat(40)
         val sourceDigest = "0".repeat(64)
         val manifest =
-            """{"sourceCommit":"$sourceCommit","artifact":"odb-runtime.jar","sha256":"$digest","sourceArtifact":"odb-source-$sourceCommit.tar.gz","sourceSha256":"$sourceDigest","javaClassVersion":52,"integrationProtocol":1,"adapterClass":"com.lambda.Debugger.IntegrationLauncher","dependencies":["commons-io:commons-io:2.21.0","org.apache.bcel:bcel:6.12.0","org.apache.commons:commons-lang3:3.20.0","org.ow2.asm:asm:9.7.1"]}"""
+            """{"sourceCommit":"$sourceCommit","artifact":"odb-runtime.jar","sha256":"$digest","sourceArtifact":"odb-source-$sourceCommit.tar.gz","sourceSha256":"$sourceDigest","javaClassVersion":52,"integrationProtocol":1,"adapterClass":"com.lambda.Debugger.IntegrationLauncher","dependencies":["commons-io:commons-io:2.22.0","org.apache.bcel:bcel:6.12.0","org.apache.commons:commons-lang3:3.20.0","org.ow2.asm:asm:9.7.1"]}"""
         outputManifest.get().asFile.apply {
             parentFile.mkdirs()
             writeText(manifest)
@@ -229,7 +229,7 @@ abstract class VerifyBundledOdb : DefaultTask() {
         val sourceSha = sha256(sourceFile.readBytes())
         val dependencies = manifest.requiredStrings("dependencies")
         val approvedDependencies = listOf(
-            "commons-io:commons-io:2.21.0",
+            "commons-io:commons-io:2.22.0",
             "org.apache.bcel:bcel:6.12.0",
             "org.apache.commons:commons-lang3:3.20.0",
             "org.ow2.asm:asm:9.7.1",
@@ -348,7 +348,7 @@ abstract class VerifyBundledOdb : DefaultTask() {
             objectValue.requiredString("purl")
         }.sorted()
         val expectedPurls = listOf(
-            "pkg:maven/commons-io/commons-io@2.21.0",
+            "pkg:maven/commons-io/commons-io@2.22.0",
             "pkg:maven/org.apache.bcel/bcel@6.12.0",
             "pkg:maven/org.apache.commons/commons-lang3@3.20.0",
             "pkg:maven/org.ow2.asm/asm@9.7.1",
