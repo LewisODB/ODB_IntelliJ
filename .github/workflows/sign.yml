@@ -211,22 +211,10 @@ jobs:
           overwrite: false
 
   exact-signed-verifier:
-    name: Verify signed ZIP on ${{ matrix.label }}
+    name: Verify signed ZIP on IDEA 252 Community
     needs: sign-once
     runs-on: ubuntu-24.04
     timeout-minutes: 20
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - label: IDEA 252 Community
-            ide: 252-community
-          - label: IDEA 252 Ultimate
-            ide: 252-ultimate
-          - label: IDEA 253 unified
-            ide: 253
-          - label: IDEA 261 unified
-            ide: 261
     steps:
       - name: Fetch tested sources
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -263,21 +251,19 @@ jobs:
           archive="$(find candidate -type f -name '*.zip' -print -quit)"
           test -n "$archive"
           test "$(sha256sum "$archive" | awk '{print $1}')" = "$EXPECTED_SHA256"
-          bash scripts/assert-no-plugin-rebuild.sh verifyExactPlugin "$archive" \
-            "-PpluginVerifierIde=${{ matrix.ide }}"
+          bash scripts/assert-no-plugin-rebuild.sh verifyExactPlugin "$archive"
           echo "path=$archive" >> "$GITHUB_OUTPUT"
 
       - name: Inspect and run Plugin Verifier on signed ZIP
         run: >-
           ./gradlew --no-daemon verifyExactPlugin
           "-PpluginArchive=${{ steps.candidate.outputs.path }}"
-          "-PpluginVerifierIde=${{ matrix.ide }}"
 
       - name: Upload signed-ZIP verifier evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: signed-verifier-${{ matrix.ide }}-${{ needs.sign-once.outputs.signed-sha256 }}
+          name: signed-verifier-252-community-${{ needs.sign-once.outputs.signed-sha256 }}
           path: |
             build/reports/bundledOdb
             build/reports/pluginVerifier

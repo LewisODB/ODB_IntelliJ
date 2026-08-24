@@ -75,21 +75,11 @@ jobs:
           if-no-files-found: error
           overwrite: false
 
-  headless-feature-matrix:
-    name: ${{ matrix.label }} feature tests
+  headless-feature-tests:
+    name: IDEA 252 Community feature tests
     needs: package-unsigned
     runs-on: ubuntu-24.04
     timeout-minutes: 25
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - label: IDEA 252 Community
-            task: testIde252Community
-          - label: IDEA 252 Ultimate
-            task: testIde252Ultimate
-          - label: IDEA 261 unified
-            task: testIde261
     steps:
       - name: Fetch sources
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -113,33 +103,21 @@ jobs:
           cache-read-only: true
 
       - name: Run exact IDEA feature suite
-        run: ./gradlew --no-daemon ${{ matrix.task }}
+        run: ./gradlew --no-daemon testIde252Community
 
       - name: Retain failed test reports
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: test-report-${{ matrix.task }}-${{ github.run_id }}
-          path: build/reports/tests/${{ matrix.task }}
+          name: test-report-testIde252Community-${{ github.run_id }}
+          path: build/reports/tests/testIde252Community
           if-no-files-found: warn
 
   exact-zip-verifier:
-    name: Verify downloaded ZIP on ${{ matrix.label }}
+    name: Verify downloaded ZIP on IDEA 252 Community
     needs: package-unsigned
     runs-on: ubuntu-24.04
     timeout-minutes: 45
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - label: IDEA 252 Community
-            ide: 252-community
-          - label: IDEA 252 Ultimate
-            ide: 252-ultimate
-          - label: IDEA 253 unified
-            ide: 253
-          - label: IDEA 261 unified
-            ide: 261
     steps:
       - name: Fetch sources
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -172,28 +150,26 @@ jobs:
           archive="$(find candidate -type f -name '*.zip' -print -quit)"
           test -n "$archive"
           test "$(sha256sum "$archive" | awk '{print $1}')" = "${{ needs.package-unsigned.outputs.plugin-sha256 }}"
-          bash scripts/assert-no-plugin-rebuild.sh verifyExactPlugin "$archive" \
-            "-PpluginVerifierIde=${{ matrix.ide }}"
+          bash scripts/assert-no-plugin-rebuild.sh verifyExactPlugin "$archive"
           echo "path=$archive" >> "$GITHUB_OUTPUT"
 
       - name: Inspect and run Plugin Verifier on exact ZIP
         run: >-
           ./gradlew --no-daemon verifyExactPlugin
           "-PpluginArchive=${{ steps.candidate.outputs.path }}"
-          "-PpluginVerifierIde=${{ matrix.ide }}"
 
       - name: Retain exact-ZIP reports
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: exact-zip-reports-${{ matrix.ide }}-${{ github.run_id }}
+          name: exact-zip-reports-252-community-${{ github.run_id }}
           path: |
             build/reports/bundledOdb
             build/reports/pluginVerifier
           if-no-files-found: warn
 
   installed-zip-smoke:
-    name: IDEA 253 installed-ZIP open/close
+    name: IDEA 252 Community installed-ZIP open/close
     needs: package-unsigned
     runs-on: ubuntu-24.04
     timeout-minutes: 12

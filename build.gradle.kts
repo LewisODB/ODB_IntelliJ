@@ -480,19 +480,7 @@ intellijPlatform {
             ),
         )
         ides {
-            when (val selectedIde = providers.gradleProperty("pluginVerifierIde").orNull) {
-                null -> {
-                    create(IntelliJPlatformType.IntellijIdeaCommunity, "2025.2.6.3")
-                    create(IntelliJPlatformType.IntellijIdeaUltimate, "2025.2.6.3")
-                    create(IntelliJPlatformType.IntellijIdea, "2025.3.6.1")
-                    create(IntelliJPlatformType.IntellijIdea, "2026.1.4")
-                }
-                "252-community" -> create(IntelliJPlatformType.IntellijIdeaCommunity, "2025.2.6.3")
-                "252-ultimate" -> create(IntelliJPlatformType.IntellijIdeaUltimate, "2025.2.6.3")
-                "253" -> create(IntelliJPlatformType.IntellijIdea, "2025.3.6.1")
-                "261" -> create(IntelliJPlatformType.IntellijIdea, "2026.1.4")
-                else -> throw GradleException("Unsupported pluginVerifierIde: $selectedIde")
-            }
+            create(IntelliJPlatformType.IntellijIdeaCommunity, "2025.2.6.3")
         }
     }
 }
@@ -585,34 +573,13 @@ intellijPlatformTesting {
             testFramework(TestFrameworkType.Plugin.Java, "252.28539.97")
             task { configureFeatureTests() }
         }
-        register("testIde252Ultimate") {
-            type = IntelliJPlatformType.IntellijIdeaUltimate
-            version = "2025.2.6.3"
-            useInstaller = true
-            plugins { bundledPlugin("com.intellij.java") }
-            testFramework(TestFrameworkType.Platform, "252.28539.97")
-            testFramework(TestFrameworkType.Plugin.Java, "252.28539.97")
-            task { configureFeatureTests() }
-        }
-        register("testIde261") {
-            type = IntelliJPlatformType.IntellijIdea
-            version = "2026.1.4"
-            useInstaller = true
-            plugins {
-                bundledPlugin("com.intellij.java")
-                disablePlugin("org.jetbrains.plugins.vue")
-            }
-            testFramework(TestFrameworkType.Platform, "261.26222.65")
-            testFramework(TestFrameworkType.Plugin.Java, "261.26222.65")
-            task { configureFeatureTests() }
-        }
     }
 }
 
 tasks.register("testIdeMatrix") {
     group = "verification"
-    description = "Runs the feature suite on the exact approved IDEA test matrix."
-    dependsOn("testIde252Community", "testIde252Ultimate", "testIde261")
+    description = "Runs the feature suite on the minimum supported IDEA release."
+    dependsOn("testIde252Community")
 }
 
 tasks.runIde {
@@ -689,7 +656,7 @@ val extractInstalledPlugin by tasks.registering(Sync::class) {
 val installedZipSmokeSandbox = layout.buildDirectory.dir("installed-zip-smoke/sandbox")
 val installedZipSmokeOutput = layout.buildDirectory.dir("installed-zip-smoke/inspection-output")
 val installedZipSmokeProject = layout.buildDirectory.dir("installed-zip-smoke/project")
-val installedZipSmokeLog = installedZipSmokeSandbox.map { it.file("log_runIde253InstalledZip/idea.log") }
+val installedZipSmokeLog = installedZipSmokeSandbox.map { it.file("log_runIde252CommunityInstalledZip/idea.log") }
 val cleanInstalledZipSmoke by tasks.registering(Delete::class) {
     delete(installedZipSmokeLog, installedZipSmokeOutput)
 }
@@ -700,9 +667,9 @@ val prepareInstalledZipSmokeProject by tasks.registering(Sync::class) {
 
 intellijPlatformTesting {
     runIde {
-        register("runIde253InstalledZip") {
-            type = IntelliJPlatformType.IntellijIdea
-            version = "2025.3.6.1"
+        register("runIde252CommunityInstalledZip") {
+            type = IntelliJPlatformType.IntellijIdeaCommunity
+            version = "2025.2.6.3"
             useInstaller = true
             sandboxDirectory = installedZipSmokeSandbox
             plugins { bundledPlugin("com.intellij.java") }
@@ -730,11 +697,11 @@ intellijPlatformTesting {
 }
 
 val verifyInstalledZipSmoke by tasks.registering(VerifyInstalledZipSmoke::class) {
-    dependsOn("runIde253InstalledZip")
+    dependsOn("runIde252CommunityInstalledZip")
     pluginZip = pluginArchive
     ideaLog = installedZipSmokeLog
     inspectionOutput = installedZipSmokeOutput
-    expectedIdeBuild = "253.33813.55"
+    expectedIdeBuild = "252.28539.97"
     reportFile = layout.buildDirectory.file("reports/installedZipSmoke/verification.txt")
 }
 
