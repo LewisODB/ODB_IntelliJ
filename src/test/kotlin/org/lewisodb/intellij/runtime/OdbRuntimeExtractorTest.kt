@@ -25,8 +25,8 @@ class OdbRuntimeExtractorTest {
         val manifest = bundle.openManifest()!!.bufferedReader().use { OdbRuntimeManifest.parse(it.readText()) }
         val prepared = OdbRuntimeExtractor(Files.createTempDirectory("odb-bundled-runtime"), bundle).prepare()
 
-        assertEquals("40892aaef11f2585fb5a35755656662d8cbc8753", manifest.sourceCommit)
-        assertEquals("7a1a6c2953e46eb95a264982c8c9e760202c495dcd32c35c096278564db5bfc3", manifest.sha256)
+        assertEquals("cbfcfdf1905eb4e64b703fe7f6c2bd4286b08162", manifest.sourceCommit)
+        assertEquals("96b2dc18edeb8ac386ea41eb78d6ec2a09e223a5be422b3112007bf44867c733", manifest.sha256)
         assertEquals(manifest.sha256, sha256(Files.readAllBytes(prepared.runtimeJar)))
     }
 

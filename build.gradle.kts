@@ -647,7 +647,7 @@ val verifyBundledOdb by tasks.registering(VerifyBundledOdb::class) {
     if (buildsPluginArchive) dependsOn(tasks.named("buildPlugin"))
     pluginZip = pluginArchive
     sourceArchive = layout.projectDirectory.file(
-        "release-inputs/odb/odb-source-40892aaef11f2585fb5a35755656662d8cbc8753.tar.gz",
+        "release-inputs/odb/odb-source-cbfcfdf1905eb4e64b703fe7f6c2bd4286b08162.tar.gz",
     )
     releaseChecksums = layout.projectDirectory.file("release-inputs/odb/SHA256SUMS")
     maximumPluginBytes = 5L * 1024L * 1024L

@@ -1,9 +1,9 @@
 {
-  "sourceCommit": "40892aaef11f2585fb5a35755656662d8cbc8753",
+  "sourceCommit": "cbfcfdf1905eb4e64b703fe7f6c2bd4286b08162",
   "artifact": "odb-runtime.jar",
-  "sha256": "7a1a6c2953e46eb95a264982c8c9e760202c495dcd32c35c096278564db5bfc3",
-  "sourceArtifact": "odb-source-40892aaef11f2585fb5a35755656662d8cbc8753.tar.gz",
-  "sourceSha256": "9e126503e7c4c708ef6e437b9aeaa0a5bccb181c6a4ff9d342ccd6b9cafdc0ca",
+  "sha256": "96b2dc18edeb8ac386ea41eb78d6ec2a09e223a5be422b3112007bf44867c733",
+  "sourceArtifact": "odb-source-cbfcfdf1905eb4e64b703fe7f6c2bd4286b08162.tar.gz",
+  "sourceSha256": "0e068211bd235437d486820edf4232d6e3586e3872d2e25f6152c69ee78aaba5",
   "javaClassVersion": 52,
   "integrationProtocol": 1,
   "adapterClass": "com.lambda.Debugger.IntegrationLauncher",
