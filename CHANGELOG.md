@@ -2,7 +2,7 @@
 
 # Lewis ODB changelog
 
-## [1.0.0] - 2026-08-01
+## [1.0.0] - 2026-08-24
 
 ### Added
 - Permanent plugin identity and build baseline.
@@ -11,4 +11,5 @@
 - Self-contained, checksummed ODB runtime, corresponding source, SBOM, and license inventory.
 
 ### Changed
+- Modernized the bundled ODB Swing interface with clearer panes, navigation, and controller controls.
 - Removed the maximum IntelliJ IDEA build restriction. Build 252 remains the minimum.
