@@ -112,7 +112,7 @@ abstract class WriteRuntimeManifest : DefaultTask() {
         val sourceCommit = "0".repeat(40)
         val sourceDigest = "0".repeat(64)
         val manifest =
-            """{"sourceCommit":"$sourceCommit","artifact":"odb-runtime.jar","sha256":"$digest","sourceArtifact":"odb-source-$sourceCommit.tar.gz","sourceSha256":"$sourceDigest","javaClassVersion":52,"integrationProtocol":1,"adapterClass":"com.lambda.Debugger.IntegrationLauncher","dependencies":["commons-io:commons-io:2.21.0","org.apache.bcel:bcel:6.12.0","org.apache.commons:commons-lang3:3.20.0","org.ow2.asm:asm:9.7.1"]}"""
+            """{"sourceCommit":"$sourceCommit","artifact":"odb-runtime.jar","sha256":"$digest","sourceArtifact":"odb-source-$sourceCommit.tar.gz","sourceSha256":"$sourceDigest","javaClassVersion":52,"integrationProtocol":1,"adapterClass":"com.lambda.Debugger.IntegrationLauncher","dependencies":["commons-io:commons-io:2.21.0","org.apache.bcel:bcel:6.12.0","org.apache.commons:commons-lang3:3.20.0","org.ow2.asm:asm:9.10.1"]}"""
         outputManifest.get().asFile.apply {
             parentFile.mkdirs()
             writeText(manifest)
@@ -232,7 +232,7 @@ abstract class VerifyBundledOdb : DefaultTask() {
             "commons-io:commons-io:2.21.0",
             "org.apache.bcel:bcel:6.12.0",
             "org.apache.commons:commons-lang3:3.20.0",
-            "org.ow2.asm:asm:9.7.1",
+            "org.ow2.asm:asm:9.10.1",
         )
         if (
             !sourceCommit.matches(Regex("[0-9a-f]{40}")) ||
@@ -351,7 +351,7 @@ abstract class VerifyBundledOdb : DefaultTask() {
             "pkg:maven/commons-io/commons-io@2.21.0",
             "pkg:maven/org.apache.bcel/bcel@6.12.0",
             "pkg:maven/org.apache.commons/commons-lang3@3.20.0",
-            "pkg:maven/org.ow2.asm/asm@9.7.1",
+            "pkg:maven/org.ow2.asm/asm@9.10.1",
         )
         if (evidencePurls != expectedPurls) {
             throw GradleException("Bundled OSV evidence differs from the approved dependency graph.")
